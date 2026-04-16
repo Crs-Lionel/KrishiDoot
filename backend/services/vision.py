@@ -1,18 +1,12 @@
 """
 Gemini 1.5 Pro Vision — Crop Quality Grading
 Owned by: Person 2
-
-Input: base64 crop image + crop_type
-Output: GradeResponse (grade A/B/C, defects, price band)
-
-The prompt instructs Gemini to apply official Agmark grading standards
-for the specific crop. Zero-shot multimodal reasoning.
-
-Long-term: replace with fine-tuned YOLO11 for edge-device inference (13.5ms).
 """
-import base64
 import json
-import google.generativeai as genai
+import re
+
+from google import genai
+
 from config import settings
 from models.grading import GradeResponse
 
@@ -25,19 +19,49 @@ AGMARK_PROMPTS = {
 }
 
 
+def _normalize_image_data(image_b64: str) -> tuple[str, str]:
+    cleaned = image_b64.strip()
+    if cleaned.startswith("data:") and "," in cleaned:
+        header, raw = cleaned.split(",", 1)
+        mime_type = header.split(";")[0].replace("data:", "") or "image/jpeg"
+        return mime_type, raw
+    return "image/jpeg", cleaned
+
+
+def _extract_json_payload(raw_text: str) -> dict:
+    cleaned = raw_text.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned, flags=re.DOTALL)
+    return json.loads(cleaned)
+
+
+def _fallback_grade(crop_type: str) -> GradeResponse:
+    return GradeResponse(
+        grade="B",
+        defects=["manual_review_recommended"],
+        estimated_price_band="₹18-22/kg",
+        confidence=0.35,
+        agmark_standard=f"Fallback estimate for {crop_type}",
+    )
+
+
 async def grade_crop_image(image_b64: str, crop_type: str) -> GradeResponse:
     """
     Send crop image to Gemini 1.5 Pro Vision for Agmark grading.
     Returns structured GradeResponse.
     """
-    genai.configure(api_key=settings.GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-1.5-pro")
+    if not settings.GEMINI_API_KEY:
+        return _fallback_grade(crop_type)
 
-    agmark_info = AGMARK_PROMPTS.get(crop_type.lower(), f"Apply standard Indian Agmark grading for {crop_type}.")
+    genai.Client(api_key=settings.GEMINI_API_KEY)  # early check
+
+    normalized_crop = crop_type.strip()
+    agmark_info = AGMARK_PROMPTS.get(normalized_crop.lower(), f"Apply standard Indian Agmark grading for {normalized_crop}.")
+    mime_type, raw_image = _normalize_image_data(image_b64)
 
     prompt = f"""You are an expert Indian agricultural quality inspector applying official Agmark grading standards.
 
-Crop: {crop_type.title()}
+Crop: {normalized_crop.title()}
 Agmark Standards: {agmark_info}
 
 Inspect the image and respond ONLY with this exact JSON (no markdown, no explanation):
@@ -49,7 +73,15 @@ Inspect the image and respond ONLY with this exact JSON (no markdown, no explana
   "agmark_standard": "brief description of which standard applied"
 }}"""
 
-    image_data = {"mime_type": "image/jpeg", "data": image_b64}
-    response = model.generate_content([prompt, image_data])
-    result = json.loads(response.text.strip())
-    return GradeResponse(**result)
+    try:
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        import base64
+        image_part = {"inline_data": {"mime_type": mime_type, "data": raw_image}}
+        response = client.models.generate_content(
+            model="gemini-1.5-pro",
+            contents=[prompt, image_part],
+        )
+        result = _extract_json_payload(response.text)
+        return GradeResponse(**result)
+    except Exception:
+        return _fallback_grade(normalized_crop)

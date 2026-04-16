@@ -1,7 +1,12 @@
 import httpx
+
 from config import settings
 
 APMC_API_BASE = "https://api.data.gov.in/resource/9ef84268-d588-465a-a308-a864a43d0070"
+
+
+def _normalize_label(value: str) -> str:
+    return value.strip().title()
 
 
 async def get_modal_price(crop: str, state: str) -> float:
@@ -15,24 +20,35 @@ async def get_modal_price(crop: str, state: str) -> float:
     WARNING: DEMO_KEY is hard-limited to 30 requests/hour.
     Use a production key from data.gov.in for anything beyond basic testing.
     """
+    crop = _normalize_label(crop)
+    state = _normalize_label(state)
+
     params = {
         "api-key": settings.DATA_GOV_API_KEY,
         "format": "json",
-        "filters[commodity]": crop.title(),
-        "filters[state]": state.title(),
+        "filters[commodity]": crop,
+        "filters[state]": state,
         "limit": 5,
         "sort[Arrival_Date]": "desc",
     }
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.get(APMC_API_BASE, params=params)
-        response.raise_for_status()
-        data = response.json()
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(APMC_API_BASE, params=params)
+            response.raise_for_status()
+            data = response.json()
+    except httpx.HTTPError as exc:
+        raise RuntimeError("Failed to fetch APMC market data.") from exc
 
     records = data.get("records", [])
     if not records:
         raise ValueError(f"No APMC data found for '{crop}' in '{state}'. Check spelling or try a different state.")
 
-    modal_price_per_quintal = float(records[0]["Modal_Price"])
+    try:
+        modal_price_per_quintal = float(records[0]["Modal_Price"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise RuntimeError("APMC API returned an invalid modal price.") from exc
+
     return round(modal_price_per_quintal / 100, 2)  # ₹/quintal → ₹/kg
 
 
