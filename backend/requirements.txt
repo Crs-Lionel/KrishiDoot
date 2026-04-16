@@ -1,0 +1,20 @@
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+httpx==0.27.0
+python-dotenv==1.0.1
+pydantic==2.7.1
+pydantic-settings==2.2.1
+
+# AI / LangGraph
+langgraph==0.1.4
+langchain-google-genai==1.0.3
+google-generativeai==0.5.4
+
+# Database
+supabase==2.4.6
+
+# Telegram
+python-telegram-bot==21.3
+
+# Optional: NeMo Guardrails (install separately if needed)
+# nemoguardrails==0.9.0
