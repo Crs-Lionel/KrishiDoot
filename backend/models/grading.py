@@ -1,4 +1,4 @@
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -6,8 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 class GradeRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    image_b64: str = Field(min_length=1)          # base64-encoded crop photo
-    crop_type: str = Field(min_length=1)          # e.g. "tomato", "wheat", "onion"
+    image_b64: str = Field(min_length=1)
+    crop_type: str = Field(min_length=1, default="auto")  # "auto" = AI detects from image
 
     @field_validator("image_b64", "crop_type", mode="before")
     @classmethod
@@ -21,10 +21,11 @@ class GradeResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     grade: Literal["A", "B", "C"]
-    defects: list[str] = Field(default_factory=list)    # e.g. ["surface cracks", "discolouration"]
-    estimated_price_band: str = Field(min_length=1)     # e.g. "₹18-22/kg"
-    confidence: float = Field(ge=0.0, le=1.0)           # 0.0 to 1.0
-    agmark_standard: str = Field(min_length=1)          # which Agmark standard was applied
+    defects: list[str] = Field(default_factory=list)
+    estimated_price_band: str = Field(min_length=1)
+    confidence: float = Field(ge=0.0, le=1.0)
+    agmark_standard: str = Field(min_length=1)
+    detected_crop_type: Optional[str] = None   # populated when crop_type="auto"
 
     @field_validator("estimated_price_band", "agmark_standard", mode="before")
     @classmethod

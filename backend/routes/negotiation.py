@@ -63,7 +63,6 @@ async def start_negotiation(request: NegotiationStartRequest):
         modal_price = 20.0  # fallback for demo if API fails
 
     batna = compute_batna(modal_price)
-    initial_ask = round(modal_price * 1.15, 2)
     grade_report = None
 
     session_id = str(uuid.uuid4())
@@ -72,6 +71,15 @@ async def start_negotiation(request: NegotiationStartRequest):
             grade_report = (await grade_crop_image(request.crop_image_b64, request.crop_type)).model_dump()
         except Exception:
             grade_report = None
+
+    # Grade-adjusted initial ask: A=+25%, B=+15% (default), C=+5%
+    grade = None
+    if grade_report:
+        grade = grade_report.get("grade")
+    elif request.crop_grade:
+        grade = request.crop_grade
+    grade_multiplier = {"A": 1.25, "B": 1.15, "C": 1.05}.get(grade or "B", 1.15)
+    initial_ask = round(modal_price * grade_multiplier, 2)
 
     negotiation_state = MultiAgentState(
         session_id=session_id,
@@ -141,16 +149,6 @@ async def respond_to_offer(request: NegotiationRespondRequest):
             new_ask=buyer_offer,
             status="agreed",
             final_price=buyer_offer,
-        )
-
-    # Guardrail: reject if buyer is below BATNA
-    if buyer_offer < state.reservation_price:
-        state.status = "rejected"
-        _sessions[request.session_id] = _serialize_state(state)
-        return NegotiationRespondResponse(
-            agent_dialogue=f"I cannot accept below ₹{state.reservation_price}/kg. That doesn't cover my costs.",
-            new_ask=state.current_ask,
-            status="rejected",
         )
 
     try:

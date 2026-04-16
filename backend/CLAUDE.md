@@ -5,7 +5,8 @@
 - **FastAPI** + uvicorn — async API server
 - **Pydantic v2** — request/response validation + LLM output enforcement
 - **LangGraph** — agent orchestration (Person 2)
-- **Gemini 1.5 Pro** — vision + dialogue (Person 2)
+- **Gemma 3** (`gemma-3-27b-it`) — negotiation dialogue (farmer agent)
+- **Gemini 2.5 Flash** (`gemini-2.5-flash`) — crop vision grading
 - **Supabase** — PostgreSQL DB, run `db/schema.sql` once to set up tables
 - **python-telegram-bot** — Telegram interface (Person 1)
 
@@ -24,10 +25,15 @@ db/schema.sql    → Person 1 (done — run in Supabase SQL editor)
 telegram_bot/    → Person 1 (done)
 ```
 
-## Person 2: What Needs Implementing
-1. `services/vision.py` — `grade_crop_image()` function is stubbed out, implement the Gemini API call
-2. `agents/` — see `agents/CLAUDE.md` for full spec
-3. Wire agents into `routes/negotiation.py` where `# TODO Person 2` comments are
+## All Implemented — Nothing Pending
+- `services/vision.py` — Gemini 2.5 Flash multimodal grading, auto-detect mode
+- `agents/` — LangGraph orchestrator + Hinglish farmer agent (Gemma 3-27b-it)
+- `routes/negotiation.py` — grade-adjusted initial_ask (A=1.25×, B=1.15×, C=1.05×)
+- `services/apmc_api.py` — 90+ mandi coordinates via `_MANDI_COORDS` + `_enrich_coords()`
+- `routes/crop_journey.py` — full beejai-to-bikri journey pipeline (10 endpoints)
+- `services/crop_ai.py` — Gemini: onboarding questions, crop recommendation, task calendar, photo health, report
+- `services/weather_api.py` — 5-day weather via wttr.in (free, no API key)
+- `services/subsidy_rss.py` — PIB Agriculture RSS feed → govt scheme alerts (feedparser, 1hr cache)
 
 ## Important Constraints
 - **Never** let `proposed_price < reservation_price` reach the buyer — `guardrails.enforce_floor()` must be called on every `AgentOutput`

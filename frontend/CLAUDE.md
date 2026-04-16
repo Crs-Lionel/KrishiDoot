@@ -22,12 +22,13 @@ npm run dev          # http://localhost:5173
 | Route | Component | Layout |
 |-------|-----------|--------|
 | `/` | `Landing.jsx` | None — full-screen marketing page with own nav |
-| `/grade` | `Grade.jsx` | `AppLayout` — sticky header + 3-tab bottom nav |
+| `/grade` | `Grade.jsx` | `AppLayout` — sticky header + 4-tab bottom nav |
 | `/negotiate` | `Negotiate.jsx` | `AppLayout` |
 | `/market` | `Market.jsx` | `AppLayout` |
+| `/grow` | `CropJourney.jsx` | `AppLayout` |
 
 `AppLayout` is defined inside `App.jsx` and uses React Router `<Outlet />`.
-The 3-tab bottom nav has: Grade · Negotiate · Prices (no "Home" — logo links back to `/`).
+The 4-tab bottom nav has: Grade · Negotiate · Prices · Grow (logo links back to `/`).
 
 ## Pages & Status
 | File | Status | Notes |
@@ -37,6 +38,7 @@ The 3-tab bottom nav has: Grade · Negotiate · Prices (no "Home" — logo links
 | `pages/Grade.jsx` | Done | Photo upload → `/grade/crop` → Agmark grade result |
 | `pages/Negotiate.jsx` | Done | Setup form → chat UI → `/negotiate/start` + `/negotiate/respond` |
 | `pages/Market.jsx` | Done | Crop+state dropdowns → `/market/price` → modal price + BATNA |
+| `pages/CropJourney.jsx` | Done | Full beejai-to-bikri journey: AI questions → recommendation → task calendar → weather/subsidies/photo-check → PDF report |
 
 ## Design System
 Single-colour professional UI. **No emojis in functional UI — inline SVG only.**
@@ -113,14 +115,22 @@ lenis.on('scroll', ScrollTrigger.update)
 ## Person 3 Progress
 | Task | Status |
 |------|--------|
-| `pages/Market.jsx` — full price lookup UI | ✅ Done |
+| `pages/Market.jsx` — Best Mandi Finder (ranked cards, net value, supply bars, BATNA advisory) | ✅ Done |
 | Professional UI redesign — all app pages | ✅ Done |
 | Inter font + Tailwind config | ✅ Done |
 | SVG icon nav with active states | ✅ Done |
 | `pages/Landing.jsx` — full marketing landing page | ✅ Done |
 | GSAP + Lenis + Swiper animation stack | ✅ Done |
 | Layout route architecture (`AppLayout` + `Outlet`) | ✅ Done |
-| Voice input UI (Bhashini integration) | 📋 Future |
+| Voice input UI (Bhashini integration) | ✅ Done (Web Speech API — mic STT + TTS in Negotiate.jsx) |
+| Grade → Negotiate flow (pre-fill from Grade page) | ✅ Done (localStorage handoff + grade banner) |
+| Multi-crop parallel negotiation (tabs, LangGraph sessions) | ✅ Done (up to 5 crops, independent sessions) |
+| Auto-detect crop from image (no manual selection) | ✅ Done (crop_type="auto" → Gemini identifies) |
+| Hinglish AI dialogue + Hindi TTS/STT | ✅ Done (hi-IN voice, Hinglish Gemma prompt) |
+| Accept button, analytics strip, summary table | ✅ Done |
+| Mandi comparison — `/market/mandis` endpoint, net value ranking | ✅ Done |
+| `pages/CropJourney.jsx` — Fasal Journey (beejai→bikri) with AI calendar, weather, subsidies, photo check, PDF report | ✅ Done |
+| 4th nav tab "Grow" (IconSprout) → `/grow` | ✅ Done |
 | FPO batch mode UI | 📋 Future |
 
 ## Known Issues (Code Review — pending fix)

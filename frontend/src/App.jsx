@@ -1,8 +1,9 @@
 import { Routes, Route, Link, useLocation, Outlet } from 'react-router-dom'
-import Landing   from './pages/Landing.jsx'
-import Negotiate from './pages/Negotiate.jsx'
-import Grade     from './pages/Grade.jsx'
-import Market    from './pages/Market.jsx'
+import Landing     from './pages/Landing.jsx'
+import Negotiate   from './pages/Negotiate.jsx'
+import Grade       from './pages/Grade.jsx'
+import Market      from './pages/Market.jsx'
+import CropJourney from './pages/CropJourney.jsx'
 import { LeafIcon } from './components/ui.jsx'
 
 function IconCamera({ active }) {
@@ -30,10 +31,19 @@ function IconChart({ active }) {
   )
 }
 
+function IconSprout({ active }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={active ? 2 : 1.5} className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z" />
+    </svg>
+  )
+}
+
 const APP_NAV = [
   { to: '/grade',     label: 'Grade',     Icon: IconCamera },
   { to: '/negotiate', label: 'Negotiate', Icon: IconScale  },
   { to: '/market',    label: 'Prices',    Icon: IconChart  },
+  { to: '/grow',      label: 'Grow',      Icon: IconSprout },
 ]
 
 function AppLayout() {
@@ -41,37 +51,46 @@ function AppLayout() {
 
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col font-sans">
-      <header className="bg-gray-900 border-b border-gray-800 px-5 py-3.5 flex items-center sticky top-0 z-10">
+      {/* Header with glassmorphism */}
+      <header className="bg-gray-900/80 backdrop-blur-md border-b border-gray-800/70 px-5 py-3.5 flex items-center sticky top-0 z-30">
         <Link to="/" className="flex items-center gap-2.5">
-          <div className="w-7 h-7 bg-green-600 rounded-lg flex items-center justify-center text-white">
+          <div className="w-8 h-8 bg-green-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-green-500/20">
             <LeafIcon className="w-4 h-4" />
           </div>
           <div className="flex items-baseline">
-            <span className="font-semibold text-white text-base tracking-tight">KrishiDoot</span>
-            <span className="font-semibold text-green-400 text-base">.AI</span>
+            <span className="font-bold text-white text-base tracking-tight">KrishiDoot</span>
+            <span className="font-bold text-green-400 text-base">.AI</span>
           </div>
         </Link>
-        <div className="ml-auto text-xs text-gray-500 font-medium">Digital Fiduciary</div>
+        <div className="ml-auto flex items-center gap-2">
+          <span className="flex items-center gap-1.5 text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-full">
+            <span className="w-1 h-1 bg-emerald-400 rounded-full animate-pulse" />
+            LIVE
+          </span>
+        </div>
       </header>
 
       <main className="flex-1 max-w-xl mx-auto w-full px-4 pb-24">
         <Outlet />
       </main>
 
-      <nav className="bg-gray-900 border-t border-gray-800 flex justify-around px-2 py-1 sticky bottom-0 z-10">
+      {/* Bottom nav */}
+      <nav className="bg-gray-900/90 backdrop-blur-md border-t border-gray-800/70 flex justify-around px-2 py-1.5 sticky bottom-0 z-30">
         {APP_NAV.map(({ to, label, Icon }) => {
           const active = location.pathname === to
           return (
             <Link
               key={to}
               to={to}
-              className={`flex flex-col items-center gap-0.5 px-5 py-2 rounded-xl transition-colors duration-150 ${
-                active ? 'text-green-400' : 'text-gray-500 hover:text-gray-300'
+              className={`flex flex-col items-center gap-0.5 px-6 py-1.5 rounded-2xl transition-all duration-150 ${
+                active
+                  ? 'text-green-400 bg-green-500/10'
+                  : 'text-gray-500 hover:text-gray-300'
               }`}
             >
               <Icon active={active} />
-              <span className={`text-xs ${active ? 'font-semibold' : 'font-normal'}`}>{label}</span>
-              {active && <span className="block w-3 h-0.5 bg-green-400 rounded-full" />}
+              <span className={`text-[11px] font-semibold tracking-wide ${active ? 'text-green-400' : 'text-gray-500'}`}>{label}</span>
+              {active && <span className="block w-4 h-0.5 bg-green-400 rounded-full" />}
             </Link>
           )
         })}
@@ -85,9 +104,10 @@ export default function App() {
     <Routes>
       <Route path="/" element={<Landing />} />
       <Route element={<AppLayout />}>
-        <Route path="/grade"     element={<Grade />}     />
-        <Route path="/negotiate" element={<Negotiate />} />
-        <Route path="/market"    element={<Market />}    />
+        <Route path="/grade"     element={<Grade />}        />
+        <Route path="/negotiate" element={<Negotiate />}   />
+        <Route path="/market"    element={<Market />}      />
+        <Route path="/grow"      element={<CropJourney />} />
       </Route>
     </Routes>
   )

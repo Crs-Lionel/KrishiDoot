@@ -13,6 +13,7 @@ class NegotiationStartRequest(BaseModel):
     quantity_kg: float = Field(gt=0)
     mandi_location: str = Field(min_length=1)             # e.g. "Bengaluru, Karnataka"
     crop_image_b64: Optional[str] = None                  # base64 image for auto-grading
+    crop_grade: Optional[Literal["A", "B", "C"]] = None  # pre-known Agmark grade → adjusts initial_ask
 
     @field_validator("farmer_id", "crop_type", "mandi_location", mode="before")
     @classmethod

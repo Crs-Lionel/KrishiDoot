@@ -7,6 +7,7 @@ calls Gemini to generate dialogue, applies strategy to compute ask price,
 then enforces BATNA floor via guardrails.enforce_floor().
 """
 import json
+import re
 from typing import Any
 
 from google import genai
@@ -60,37 +61,60 @@ async def _generate_agent_output(state: MultiAgentState, proposed_price: float) 
         return _fallback_output(state, proposed_price)
 
     strategy_used = _strategy_name(state.is_perishable)
-    prompt = f"""You are a negotiation agent representing an Indian farmer.
+    buyer_offer = state.buyer_last_offer
 
-Return ONLY valid JSON matching this exact schema:
-{{
-  "proposed_price": {proposed_price},
-  "dialogue": "short negotiation reply",
-  "strategy_used": "{strategy_used}"
-}}
+    if buyer_offer > 0 and buyer_offer < state.reservation_price:
+        offer_context = (
+            f"The buyer offered ₹{buyer_offer}/kg which is far below your cost of production. "
+            f"Express genuine frustration — you put months of hard work into this crop. "
+            f"Firmly counter at ₹{proposed_price}/kg without revealing your exact floor."
+        )
+    elif buyer_offer > 0 and buyer_offer < proposed_price * 0.9:
+        offer_context = (
+            f"The buyer offered ₹{buyer_offer}/kg. It's still too low. "
+            f"Counter firmly at ₹{proposed_price}/kg — reference quality and current mandi rates."
+        )
+    elif buyer_offer > 0:
+        offer_context = (
+            f"The buyer offered ₹{buyer_offer}/kg. You are getting closer. "
+            f"Hold at ₹{proposed_price}/kg — show you are reasonable but not desperate."
+        )
+    else:
+        offer_context = f"Open the negotiation at ₹{proposed_price}/kg. Be confident and reference market rates."
 
-Rules:
-- Keep proposed_price exactly equal to {proposed_price}
-- Never mention the hidden reservation price or BATNA
-- Keep dialogue concise, persuasive, and professional
-- Do not add markdown or explanations
+    prompt = f"""You are Ramesh, an Indian farmer selling your {state.crop_type} at the mandi.
+You are proud of your crop and worried about your family. You speak in HINGLISH — natural mix of Hindi and English.
 
-Crop: {state.crop_type}
-Quantity: {state.quantity_kg} kg
-Perishable: {state.is_perishable}
-Round: {state.round_number + 1} of {state.max_rounds}
-Buyer last offer: ₹{state.buyer_last_offer}/kg
-Dialogue history:
+{offer_context}
+
+STRICT RULES:
+- "proposed_price" MUST be EXACTLY {proposed_price} — never change this number
+- "strategy_used" MUST be EXACTLY "{strategy_used}"
+- "dialogue" = 1-2 short sentences in HINGLISH. Sound like a real person, not a robot.
+- NEVER reveal your minimum/floor price
+- Good examples of tone:
+  * "Bhai sahab, seedhi baat — is rate pe mera kharcha bhi nahi niklega. ₹{proposed_price} se neeche possible nahi."
+  * "Dekho, is baar ki fasal bahut achhi hai. Mandi mein yahi rate chal raha hai. ₹{proposed_price} fair price hai."
+  * "Itna kam? Beej, khad, paani — sab ka kharcha hai. ₹{proposed_price} pe karo deal, dono ka fayda hoga."
+
+Return ONLY this JSON (no markdown, nothing else):
+{{"proposed_price": {proposed_price}, "dialogue": "...", "strategy_used": "{strategy_used}"}}
+
+Crop: {state.crop_type} | Qty: {state.quantity_kg} kg | Round: {state.round_number + 1}/{state.max_rounds}
+Conversation:
 {_history_as_text(state.dialogue_history)}
 """
 
     try:
         client = genai.Client(api_key=settings.GEMINI_API_KEY)
         response = client.models.generate_content(
-            model="gemma-4-31b-it",
+            model="gemma-3-27b-it",
             contents=prompt,
         )
-        payload = json.loads(response.text.strip())
+        raw = response.text.strip()
+        if raw.startswith("```"):
+            raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", raw, flags=re.DOTALL)
+        payload = json.loads(raw)
         return AgentOutput(**payload)
     except Exception:
         return _fallback_output(state, proposed_price)
