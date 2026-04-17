@@ -383,40 +383,47 @@ def _normalize_label(value: str) -> str:
 
 async def get_modal_price(crop: str, state: str) -> float:
     """
-    Fetch today's modal price (₹/kg) from the data.gov.in APMC Mandi Prices API.
-    Raw unit is ₹/quintal (100kg), so we divide by 100 to get ₹/kg.
-    DEMO_KEY is hard-limited to 30 requests/hour.
+    Return today's modal price (₹/kg).
+    Uses live data.gov.in API only when a real (non-DEMO) key is set;
+    otherwise reads from the curated _MANDI_DB / FALLBACK_PRICES.
     """
-    crop = _normalize_label(crop)
-    state = _normalize_label(state)
+    crop_l = crop.strip().lower()
+    state_l = state.strip().lower()
 
-    params = {
-        "api-key": settings.DATA_GOV_API_KEY,
-        "format": "json",
-        "filters[commodity]": crop,
-        "filters[state]": state,
-        "limit": 5,
-        "sort[Arrival_Date]": "desc",
-    }
+    # Live API only with a real key
+    if settings.DATA_GOV_API_KEY and settings.DATA_GOV_API_KEY.upper() != "DEMO_KEY":
+        crop_n = _normalize_label(crop)
+        state_n = _normalize_label(state)
+        params = {
+            "api-key": settings.DATA_GOV_API_KEY,
+            "format": "json",
+            "filters[commodity]": crop_n,
+            "filters[state]": state_n,
+            "limit": 5,
+            "sort[Arrival_Date]": "desc",
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(APMC_API_BASE, params=params)
+                response.raise_for_status()
+                data = response.json()
+            records = data.get("records", [])
+            if records:
+                return round(float(records[0]["Modal_Price"]) / 100, 2)
+        except Exception:
+            pass
 
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(APMC_API_BASE, params=params)
-            response.raise_for_status()
-            data = response.json()
-    except httpx.HTTPError as exc:
-        raise RuntimeError("Failed to fetch APMC market data.") from exc
+    # Curated local DB
+    mandis = _MANDI_DB.get(state_l, {}).get(crop_l)
+    if mandis:
+        return max(m["price"] for m in mandis)
 
-    records = data.get("records", [])
-    if not records:
-        raise ValueError(f"No APMC data found for '{crop}' in '{state}'. Check spelling or try a different state.")
+    # Generic fallback
+    price = FALLBACK_PRICES.get(crop_l)
+    if price:
+        return price
 
-    try:
-        modal_price_per_quintal = float(records[0]["Modal_Price"])
-    except (KeyError, TypeError, ValueError) as exc:
-        raise RuntimeError("APMC API returned an invalid modal price.") from exc
-
-    return round(modal_price_per_quintal / 100, 2)
+    raise ValueError(f"No price data for '{crop}' in '{state}'. Try: tomato, wheat, onion, rice, potato, maize, soybean, cotton.")
 
 
 async def _fetch_mandis_from_api(crop: str, state: str) -> list[dict]:

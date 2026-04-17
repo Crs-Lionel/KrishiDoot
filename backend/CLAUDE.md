@@ -29,7 +29,7 @@ telegram_bot/    → Person 1 (done)
 - `services/vision.py` — Gemini 2.5 Flash multimodal grading, auto-detect mode
 - `agents/` — LangGraph orchestrator + Hinglish farmer agent (Gemma 3-27b-it)
 - `routes/negotiation.py` — grade-adjusted initial_ask (A=1.25×, B=1.15×, C=1.05×)
-- `services/apmc_api.py` — 90+ mandi coordinates via `_MANDI_COORDS` + `_enrich_coords()`
+- `services/apmc_api.py` — 90+ mandi coordinates via `_MANDI_COORDS` + `_enrich_coords()`; `get_modal_price` uses local `_MANDI_DB`/`FALLBACK_PRICES` when `DEMO_KEY` is set (no live API call)
 - `routes/crop_journey.py` — full beejai-to-bikri journey pipeline (10 endpoints)
 - `services/crop_ai.py` — Gemini: onboarding questions, crop recommendation, task calendar, photo health, report
 - `services/weather_api.py` — 5-day weather via wttr.in (free, no API key)

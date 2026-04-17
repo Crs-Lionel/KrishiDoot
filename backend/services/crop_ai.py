@@ -52,9 +52,17 @@ async def generate_onboarding_questions(location: str, month: int, land_photo_b6
         mime, img_bytes = _decode_b64(land_photo_b64)
         contents.append(genai_types.Part.from_bytes(data=img_bytes, mime_type=mime))
 
+    photo_instruction = ""
+    if land_photo_b64:
+        photo_instruction = """
+IMPORTANT: Analyze the land photo carefully. For any question whose answer is clearly visible in the photo
+(e.g. soil colour, terrain type, water body presence, crop residue), add a "detected_from_photo" field
+with the exact matching option string. Only set this when you are confident — do NOT guess."""
+
     contents.append(f"""You are KrishiDoot AI — expert Indian agricultural advisor.
 {"Farmer shared a land photo (see above)." if land_photo_b64 else ""}
 Location: {location} | Month: {month_name}
+{photo_instruction}
 
 Generate exactly 6 simple Hinglish questions to understand the farmer's situation.
 Cover: soil type/colour, water/irrigation source, land size in acres, last crop grown, budget, farming experience.
@@ -67,10 +75,11 @@ Return ONLY valid JSON array (no markdown, no explanation):
   {{"id":"q4","question":"Pichli fasal kya thi?","type":"choice","options":["Gehun (Wheat)","Chawal (Rice)","Daal (Pulses)","Kuch nahi (Fallow)"]}},
   {{"id":"q5","question":"Kitne saal se kheti kar rahe hain?","type":"choice","options":["2 saal se kam","2-5 saal","5-15 saal","15+ saal"]}},
   {{"id":"q6","question":"Ek acre par kitna budget hai?","type":"choice","options":["₹5,000 tak","₹5,000-15,000","₹15,000-30,000","₹30,000+"]}}
-]""")
+]
+Example with photo detection: {{"id":"q1",...,"detected_from_photo":"Kali (Black)"}}""")
 
     try:
-        r = _client().models.generate_content(model="gemini-2.5-flash", contents=contents)
+        r = await _client().aio.models.generate_content(model="gemini-2.5-flash", contents=contents)
         return json.loads(_extract(r.text, "["))
     except Exception as exc:
         print(f"[crop_ai] questions failed: {exc}")
@@ -127,7 +136,7 @@ Return ONLY valid JSON (no markdown):
 }}""")
 
     try:
-        r = _client().models.generate_content(model="gemini-2.5-flash", contents=contents)
+        r = await _client().aio.models.generate_content(model="gemini-2.5-flash", contents=contents)
         return json.loads(_extract(r.text))
     except Exception as exc:
         print(f"[crop_ai] recommend failed: {exc}")
@@ -188,7 +197,7 @@ Include water schedule, fertilizer timing (basal vs top-dress), pesticide window
 Task titles in Hinglish. Cover ALL {weeks} weeks including harvest."""
 
     try:
-        r = _client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        r = await _client().aio.models.generate_content(model="gemini-2.5-flash", contents=prompt)
         return json.loads(_extract(r.text, "["))
     except Exception as exc:
         print(f"[crop_ai] calendar failed: {exc}")
@@ -245,7 +254,7 @@ status options: healthy|mild_stress|diseased|pest_attack|nutrient_deficiency|dro
 health_score: 0-100. Observations and action in Hinglish."""
 
     try:
-        r = _client().models.generate_content(model="gemini-2.5-flash", contents=[img_part, prompt])
+        r = await _client().aio.models.generate_content(model="gemini-2.5-flash", contents=[img_part, prompt])
         return json.loads(_extract(r.text))
     except Exception as exc:
         print(f"[crop_ai] photo check failed: {exc}")
@@ -282,7 +291,7 @@ Return ONLY valid JSON (no markdown):
 }}"""
 
     try:
-        r = _client().models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        r = await _client().aio.models.generate_content(model="gemini-2.5-flash", contents=prompt)
         return json.loads(_extract(r.text))
     except Exception as exc:
         print(f"[crop_ai] report failed: {exc}")

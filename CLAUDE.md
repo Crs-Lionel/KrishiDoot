@@ -56,7 +56,7 @@ backend/
     grading.py         → Done
     market_data.py     → Done (mandis with lat/lon, fallback prices)
   services/
-    apmc_api.py        → Done (MANDI_DB + coords, get_mandi_prices, FALLBACK_PRICES)
+    apmc_api.py        → Done (MANDI_DB + coords, get_mandi_prices, FALLBACK_PRICES; get_modal_price uses local DB when DEMO_KEY set — no live API hit)
     vision.py          → Done (Gemini 2.5 Flash, auto-detect crop_type="auto")
     guardrails.py      → Done
   agents/              → Done (farmer_agent Hinglish, buyer_agent, orchestrator)
@@ -70,7 +70,7 @@ frontend/
     Negotiate.jsx      → Done (multi-crop tabs, auto-start, PDF receipt, voice)
     Market.jsx         → Done (Leaflet map with ranked pins + mandi cards)
   src/components/ui.jsx → shared UI primitives (INPUT_CLS, SELECT_CLS, ErrorAlert, SpinnerIcon, LeafIcon, AlertIcon, InfoIcon)
-    CropJourney.jsx    → Done (beejai-to-bikri journey: AI questions, task calendar, weather, subsidies, report)
+    CropJourney.jsx    → Done (beejai-to-bikri journey: AI questions, task calendar, weather, subsidies, report; auto-detected month + hardcoded schemes)
   src/App.jsx          → Done (glassmorphism header + LIVE badge, 4-tab nav: Grade/Negotiate/Prices/Grow)
 ```
 
@@ -95,15 +95,16 @@ frontend/
 | GET | `/crop-journey/{id}/report` | Final PDF-ready report |
 
 ## Feature: Crop Journey (Fasal Journey) — Beejai to Bikri
-1. Farmer enters location + month, optionally uploads land photo
-2. Gemini generates 6 Hinglish onboarding questions (soil, water, budget, experience)
+1. Farmer enters location + month (auto-detected via `new Date()`, shown read-only with "Badlo" override toggle), optionally uploads land photo
+2. Gemini generates 6 Hinglish onboarding questions (soil, water, budget, experience); when land photo is provided, Gemini adds `detected_from_photo` field to questions it can answer from the image — frontend auto-pre-fills those answers and shows a "📷 Photo se detect hua" badge
 3. AI analyzes answers + weather → recommends best crop with yield/income estimate
 4. Farmer picks sowing date + land size → AI generates week-by-week task calendar
-5. Dashboard: Tasks tab (checkbox per task), Weather tab (wttr.in forecast + advisory), Subsidies tab (PIB RSS), Timeline tab
+5. Dashboard: Tasks tab (checkbox per task), Weather tab (wttr.in forecast + advisory), Subsidies tab (PIB RSS + hardcoded schemes), Timeline tab
 6. Photo Check: upload crop photo at any week → Gemini returns health score + immediate action + subsidy tip
 7. Journey Complete: enter selling price → AI generates profit/loss report → PDF download
 - Journey state stored in-memory (`_journeys` dict in `routes/crop_journey.py`) — lost on restart
 - Journey ID persisted in localStorage (`kd_journey_id`) — auto-restores on page reload
+- Sahayata tab: always shows `HARDCODED_SCHEMES` (19 schemes — 4 national + state-specific for MH/PB/UP/RJ/MP/KA/GJ/HR); `extractState(location)` parses city/state name from location string to filter relevant state schemes; live PIB RSS results shown above if available
 
 ## Feature: Grade → Negotiate Seamless Flow
 1. User uploads crop photo on `/grade`
@@ -130,7 +131,7 @@ frontend/
 
 ## Known Issues / Remaining Work
 - Supabase not wired — sessions lost on server restart (acceptable for demo)
-- DEMO_KEY rate-limited at 30 req/hr — market page falls back to representative prices
+- DEMO_KEY rate-limited at 30 req/hr — `get_modal_price` and `get_mandi_prices` both skip live API and read from local `_MANDI_DB` / `FALLBACK_PRICES` when `DEMO_KEY` is set
 - Gemini 2.5 Flash grading: if API call fails, returns fallback (Grade B, 35% confidence)
 - Telegram bot negotiation uses simple stub logic, not LangGraph
 - Voice (STT/TTS) uses Web Speech API (hi-IN) — works on Chrome/Edge, not Safari/Firefox
@@ -140,6 +141,9 @@ frontend/
 - Leaflet map uses CARTO dark tiles (free, no key) — requires internet connection
 
 ## Important Constraints
+- **`crop_ai.py` uses `await client.aio.models.generate_content()`** (async Gemini API) for ALL calls — do NOT revert to sync `client.models.generate_content()`, which causes "client has been closed" errors in FastAPI async context
+
+
 - **Never** let `proposed_price < reservation_price` reach the buyer — `guardrails.enforce_floor()` enforced in `routes/negotiation.py`
 - All LLM output parsed as `AgentOutput` Pydantic model — no free-form text
 - `NegotiationStartRequest` has `extra="forbid"` — only send fields: `farmer_id, crop_type, quantity_kg, mandi_location, crop_image_b64, crop_grade`

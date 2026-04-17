@@ -25,6 +25,53 @@ const TASK_ICON = {
 const MONTHS = ['January','February','March','April','May','June',
   'July','August','September','October','November','December']
 
+const HARDCODED_SCHEMES = [
+  { id: 'pm-kisan', name: 'PM-KISAN Samman Nidhi', desc: '₹6,000 annual direct cash transfer in 3 installments to all small/marginal landholding farmers.', state: 'all', link: 'https://pmkisan.gov.in/', tag: 'National' },
+  { id: 'pmfby', name: 'PM Fasal Bima Yojana', desc: 'Crop insurance against natural calamities, pests & diseases. Low premium: 2% Kharif, 1.5% Rabi crops.', state: 'all', link: 'https://pmfby.gov.in/', tag: 'National' },
+  { id: 'kcc', name: 'Kisan Credit Card (KCC)', desc: 'Short-term crop loans at subsidized 7% p.a. interest — up to ₹3 lakh for cultivation & inputs.', state: 'all', link: 'https://nabard.org', tag: 'National' },
+  { id: 'enam', name: 'eNAM — Online Mandi', desc: 'Sell directly on pan-India electronic market (1,389+ mandis). Better price discovery, no middlemen.', state: 'all', link: 'https://enam.gov.in/', tag: 'National' },
+  { id: 'mh-mahadbt', name: 'MahaDBT — Krishi Yantra Anudan', desc: '50% subsidy on farm machinery (tractors, sprayers, harvesters) via MahaDBT portal lottery system.', state: 'maharashtra', link: 'https://mahadbt.maharashtra.gov.in/', tag: 'Maharashtra' },
+  { id: 'mh-farm-pond', name: 'Magel Tyala Shet Tale (Farm Pond)', desc: 'Free farm pond construction for water storage — 100% state subsidy for small/marginal farmers.', state: 'maharashtra', link: 'https://mahadbt.maharashtra.gov.in/', tag: 'Maharashtra' },
+  { id: 'pb-parali', name: 'Punjab Parali Management Scheme', desc: '₹2,500/acre incentive for in-situ crop residue management — avoid stubble burning penalty.', state: 'punjab', link: 'https://agri.punjab.gov.in/', tag: 'Punjab' },
+  { id: 'pb-drip', name: 'Punjab Drip Irrigation Subsidy', desc: '80% subsidy on drip/sprinkler irrigation systems to reduce water consumption.', state: 'punjab', link: 'https://agri.punjab.gov.in/', tag: 'Punjab' },
+  { id: 'up-yantra', name: 'UP Krishi Yantra Anudan', desc: 'Direct subsidy on farm equipment purchase via UP Agriculture DBT portal.', state: 'uttar_pradesh', link: 'https://upagriculture.com/', tag: 'Uttar Pradesh' },
+  { id: 'up-solar', name: 'UP Kisan Uday Solar Pump Yojana', desc: 'Free solar pump (up to 5 HP) for small farmers to eliminate irrigation electricity costs.', state: 'uttar_pradesh', link: 'https://upagriculture.com/', tag: 'Uttar Pradesh' },
+  { id: 'rj-tarbandi', name: 'Rajasthan Tarbandi Yojana', desc: '50% subsidy (max ₹40,000) on farm fencing to protect crops from stray/wild animals.', state: 'rajasthan', link: 'https://rajkisan.rajasthan.gov.in/', tag: 'Rajasthan' },
+  { id: 'rj-processing', name: 'Rajasthan Krishi Processing Subsidy', desc: 'Subsidy on food processing equipment to add value to produce before selling at mandi.', state: 'rajasthan', link: 'https://rajkisan.rajasthan.gov.in/', tag: 'Rajasthan' },
+  { id: 'mp-bhavantar', name: 'MP Bhavantar Bhugtan Yojana', desc: 'Price support: if mandi price < MSP, state government pays the difference directly to your bank.', state: 'madhya_pradesh', link: 'http://mpkrishi.mp.gov.in/', tag: 'Madhya Pradesh' },
+  { id: 'mp-solar', name: 'MP Mukhyamantri Solar Pump Yojana', desc: '90% subsidy on solar pump installation (up to 5 HP) for year-round irrigation.', state: 'madhya_pradesh', link: 'http://mpkrishi.mp.gov.in/', tag: 'Madhya Pradesh' },
+  { id: 'ka-raitamitra', name: 'Karnataka Raitamitra Scheme', desc: 'Rainfed farming support — bund formation, farm pond, drip subsidy for dry-land farmers.', state: 'karnataka', link: 'https://raitamitra.kar.nic.in/', tag: 'Karnataka' },
+  { id: 'ka-bhoochetana', name: 'Karnataka Bhoochetana', desc: 'Soil health-based crop nutrient management to boost yields in rainfed areas.', state: 'karnataka', link: 'https://raitamitra.kar.nic.in/', tag: 'Karnataka' },
+  { id: 'gj-ikhedut', name: 'Gujarat iKhedut Portal Subsidies', desc: 'Single-window subsidies on seeds, fertilizers, irrigation equipment, solar pumps, and greenhouses.', state: 'gujarat', link: 'https://ikhedut.gujarat.gov.in/', tag: 'Gujarat' },
+  { id: 'hr-mera-pani', name: 'Haryana Mera Pani Meri Virasat', desc: '₹7,000/acre incentive for switching from paddy to water-saving crops (maize, cotton, bajra, etc.).', state: 'haryana', link: 'https://agriharyana.gov.in/', tag: 'Haryana' },
+  { id: 'hr-machinery', name: 'Haryana Farm Machinery Subsidy', desc: '50% subsidy on farm implements for individuals; 80% for FPOs/cooperative groups.', state: 'haryana', link: 'https://agriharyana.gov.in/', tag: 'Haryana' },
+]
+
+function extractState(location) {
+  const loc = location.toLowerCase()
+  const stateMap = [
+    ['maharashtra', 'maharashtra'], ['pune', 'maharashtra'], ['mumbai', 'maharashtra'],
+    ['nagpur', 'maharashtra'], ['nashik', 'maharashtra'], ['aurangabad', 'maharashtra'], ['solapur', 'maharashtra'],
+    ['punjab', 'punjab'], ['ludhiana', 'punjab'], ['amritsar', 'punjab'], ['patiala', 'punjab'], ['jalandhar', 'punjab'],
+    ['uttar pradesh', 'uttar_pradesh'], ['lucknow', 'uttar_pradesh'], ['kanpur', 'uttar_pradesh'],
+    ['agra', 'uttar_pradesh'], ['varanasi', 'uttar_pradesh'], ['meerut', 'uttar_pradesh'],
+    ['rajasthan', 'rajasthan'], ['jaipur', 'rajasthan'], ['jodhpur', 'rajasthan'],
+    ['udaipur', 'rajasthan'], ['kota', 'rajasthan'], ['bikaner', 'rajasthan'],
+    ['madhya pradesh', 'madhya_pradesh'], ['bhopal', 'madhya_pradesh'], ['indore', 'madhya_pradesh'],
+    ['gwalior', 'madhya_pradesh'], ['jabalpur', 'madhya_pradesh'],
+    ['karnataka', 'karnataka'], ['bangalore', 'karnataka'], ['bengaluru', 'karnataka'],
+    ['mysore', 'karnataka'], ['hubli', 'karnataka'], ['dharwad', 'karnataka'], ['belgaum', 'karnataka'],
+    ['gujarat', 'gujarat'], ['ahmedabad', 'gujarat'], ['surat', 'gujarat'],
+    ['vadodara', 'gujarat'], ['rajkot', 'gujarat'], ['anand', 'gujarat'],
+    ['haryana', 'haryana'], ['gurgaon', 'haryana'], ['faridabad', 'haryana'],
+    ['rohtak', 'haryana'], ['ambala', 'haryana'], ['hisar', 'haryana'], ['karnal', 'haryana'],
+  ]
+  for (const [key, state] of stateMap) {
+    if (loc.includes(key)) return state
+  }
+  return null
+}
+
 const IRRIGATION = ['Nalkoop (Borewell)', 'Nahar (Canal)', 'Barish par nirbhar (Rain-fed)', 'Talab / Pond', 'Drip System', 'Sprinkler']
 
 const CARD = 'bg-gray-800/60 rounded-xl border border-gray-700/40 p-4'
@@ -66,6 +113,7 @@ export default function CropJourney() {
   const [qtySold, setQtySold] = useState('')
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
+  const [showMonthEdit, setShowMonthEdit] = useState(false)
 
   const landRef = useRef(null)
   const cropPhotoRef = useRef(null)
@@ -98,7 +146,12 @@ export default function CropJourney() {
     setLoading(true); setErr('')
     try {
       const r = await axios.post(`${API}/crop-journey/questions`, { location, month, land_photo_b64: landB64 })
-      setQuestions(r.data.questions)
+      const qs = r.data.questions
+      setQuestions(qs)
+      // pre-fill answers detected from photo
+      const prefilled = {}
+      qs.forEach(q => { if (q.detected_from_photo) prefilled[q.id] = q.detected_from_photo })
+      if (Object.keys(prefilled).length) setAnswers(prefilled)
       setMode('questions')
     } catch { setErr('Questions load nahi hue. Try again.') }
     finally { setLoading(false) }
@@ -265,9 +318,19 @@ export default function CropJourney() {
 
         <div>
           <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Abhi Kaunsa Mahina Hai?</label>
-          <select className={SELECT} value={month} onChange={e => setMonth(Number(e.target.value))}>
-            {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-          </select>
+          {!showMonthEdit ? (
+            <div className={INPUT + ' flex items-center justify-between'}>
+              <span className="text-white">{MONTHS[month - 1]} {new Date().getFullYear()}</span>
+              <span className="flex items-center gap-2">
+                <span className="text-[10px] text-green-400 bg-green-500/10 border border-green-500/20 px-1.5 py-0.5 rounded">Auto-detected</span>
+                <button type="button" onClick={() => setShowMonthEdit(true)} className="text-[11px] text-gray-500 hover:text-gray-300 transition underline">Badlo</button>
+              </span>
+            </div>
+          ) : (
+            <select className={SELECT} value={month} onChange={e => { setMonth(Number(e.target.value)); setShowMonthEdit(false) }}>
+              {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+          )}
         </div>
 
         <div>
@@ -312,8 +375,13 @@ export default function CropJourney() {
       <div className="space-y-3">
         {questions.map((q, i) => (
           <div key={q.id} className={CARD + ' space-y-2'}>
-            <label className="text-sm font-medium text-white">
+            <label className="text-sm font-medium text-white flex items-center gap-2 flex-wrap">
               <span className="text-green-400 mr-2">{i + 1}.</span>{q.question}
+              {q.detected_from_photo && (
+                <span className="text-xs bg-blue-500/20 border border-blue-500/40 text-blue-300 px-2 py-0.5 rounded-full">
+                  📷 Photo se detect hua
+                </span>
+              )}
             </label>
             {q.type === 'choice' && (
               <div className="grid grid-cols-2 gap-1.5">
@@ -698,40 +766,60 @@ export default function CropJourney() {
         )}
 
         {/* Subsidies Tab */}
-        {activeTab === 'subsidies' && (
-          <div className="space-y-3">
-            <div className="text-xs text-gray-400">Govt schemes for {journey.crop_type} farmers</div>
-            {subLoading && <div className="text-center py-8"><SpinnerIcon /></div>}
-            {!subLoading && subsidies.length === 0 && (
-              <div className={CARD + ' text-center py-6'}>
-                <div className="text-2xl mb-2">🏛️</div>
-                <p className="text-gray-400 text-sm">Abhi koi active scheme nahi mila</p>
-                <p className="text-gray-500 text-xs mt-1">Check back later — RSS feeds refresh hourly</p>
+        {activeTab === 'subsidies' && (() => {
+          const detectedState = extractState(journey.location)
+          const hardcoded = HARDCODED_SCHEMES.filter(s => s.state === 'all' || s.state === detectedState)
+          return (
+            <div className="space-y-3">
+              <div className="text-xs text-gray-400">
+                Govt schemes for {journey.crop_type} farmers
+                {detectedState && <span className="ml-1 text-green-400 capitalize">• {detectedState.replace(/_/g, ' ')} schemes included</span>}
               </div>
-            )}
-            {subsidies.map((s, i) => (
-              <div key={i} className={CARD + ' space-y-2'}>
-                <div className="text-xs text-green-400 font-semibold uppercase">{s.source}</div>
-                <div className="text-sm font-medium text-white">{s.title}</div>
-                {s.summary && <p className="text-xs text-gray-400 line-clamp-3">{s.summary}</p>}
-                <div className="flex items-center justify-between">
-                  {s.published && <div className="text-[10px] text-gray-500">{s.published}</div>}
-                  {s.link && (
-                    <a href={s.link} target="_blank" rel="noopener noreferrer"
-                      className="text-xs text-green-400 hover:text-green-300 transition">Aur Padhe →</a>
-                  )}
+
+              {subLoading && <div className="text-center py-4"><SpinnerIcon /></div>}
+
+              {/* Live RSS results */}
+              {subsidies.map((s, i) => (
+                <div key={i} className={CARD + ' space-y-2'}>
+                  <div className="text-xs text-green-400 font-semibold uppercase">{s.source} • Live</div>
+                  <div className="text-sm font-medium text-white">{s.title}</div>
+                  {s.summary && <p className="text-xs text-gray-400 line-clamp-3">{s.summary}</p>}
+                  <div className="flex items-center justify-between">
+                    {s.published && <div className="text-[10px] text-gray-500">{s.published}</div>}
+                    {s.link && (
+                      <a href={s.link} target="_blank" rel="noopener noreferrer"
+                        className="text-xs text-green-400 hover:text-green-300 transition">Aur Padhe →</a>
+                    )}
+                  </div>
                 </div>
+              ))}
+
+              {/* Hardcoded schemes — always visible */}
+              {hardcoded.map(s => (
+                <div key={s.id} className={CARD + ' space-y-1.5'}>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide ${s.state === 'all' ? 'bg-blue-500/15 text-blue-400 border border-blue-500/20' : 'bg-amber-500/15 text-amber-400 border border-amber-500/20'}`}>{s.tag}</span>
+                  </div>
+                  <div className="text-sm font-medium text-white">{s.name}</div>
+                  <p className="text-xs text-gray-400">{s.desc}</p>
+                  <a href={s.link} target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-green-400 hover:text-green-300 transition inline-block">Apply / Aur Jaankari →</a>
+                </div>
+              ))}
+
+              <div className="text-center pt-1">
+                <a href="https://pmkisan.gov.in" target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-blue-400 hover:text-blue-300">PM-KISAN Portal →</a>
+                {' | '}
+                <a href="https://pmfby.gov.in" target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-blue-400 hover:text-blue-300">Fasal Bima →</a>
+                {' | '}
+                <a href="https://www.myscheme.gov.in/search/schemes?searchstr=farmer" target="_blank" rel="noopener noreferrer"
+                  className="text-xs text-blue-400 hover:text-blue-300">All Schemes →</a>
               </div>
-            ))}
-            <div className="text-center">
-              <a href="https://pmkisan.gov.in" target="_blank" rel="noopener noreferrer"
-                className="text-xs text-blue-400 hover:text-blue-300">PM-KISAN Portal →</a>
-              {' | '}
-              <a href="https://pmfby.gov.in" target="_blank" rel="noopener noreferrer"
-                className="text-xs text-blue-400 hover:text-blue-300">Fasal Bima →</a>
             </div>
-          </div>
-        )}
+          )
+        })()}
 
         {/* Timeline Tab */}
         {activeTab === 'timeline' && (
