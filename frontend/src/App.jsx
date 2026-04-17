@@ -58,11 +58,11 @@ function AppLayout() {
   useEffect(() => {
     const ctx = gsap.context(() => {
       gsap.from(headerRef.current, {
-        y: -56, autoAlpha: 0,
+        y: -56, opacity: 0,
         duration: 0.6, ease: 'power3.out',
       })
       gsap.from('.kd-nav-item', {
-        y: 48, autoAlpha: 0,
+        y: 48, opacity: 0,
         duration: 0.5, ease: 'power3.out',
         stagger: { each: 0.07, from: 'start' },
         delay: 0.18,
@@ -75,7 +75,7 @@ function AppLayout() {
   useEffect(() => {
     const ctx = gsap.context(() => {
       gsap.from(mainRef.current, {
-        autoAlpha: 0, y: 10,
+        opacity: 0, y: 10,
         duration: 0.28, ease: 'power2.out',
       })
     })

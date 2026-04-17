@@ -162,8 +162,8 @@ export default function Market() {
   /* Page entrance */
   useEffect(() => {
     const ctx = gsap.context(() => {
-      gsap.from('.market-header', { y: -16, autoAlpha: 0, duration: 0.45, ease: 'power3.out' })
-      gsap.from('.market-controls', { y: 20, autoAlpha: 0, duration: 0.5, ease: 'power3.out', delay: 0.08 })
+      gsap.from('.market-header', { y: -16, opacity: 0, duration: 0.45, ease: 'power3.out' })
+      gsap.from('.market-controls', { y: 20, opacity: 0, duration: 0.5, ease: 'power3.out', delay: 0.08 })
     }, pageRef)
     return () => ctx.revert()
   }, [])
@@ -175,20 +175,20 @@ export default function Market() {
       const tl = gsap.timeline({ defaults: { ease: 'power3.out' } })
 
       tl.from('.market-map', {
-        autoAlpha: 0, scale: 0.97, duration: 0.5,
+        opacity: 0, scale: 0.97, duration: 0.5,
       })
       .from('.market-rec-banner', {
-        y: -20, autoAlpha: 0, duration: 0.45,
+        y: -20, opacity: 0, duration: 0.45,
       }, '-=0.2')
       .from('.market-section-label', {
-        autoAlpha: 0, duration: 0.3,
+        opacity: 0, duration: 0.3,
       }, '-=0.1')
       .from('.market-mandi-card', {
-        y: 28, autoAlpha: 0, duration: 0.45,
+        y: 28, opacity: 0, duration: 0.45,
         stagger: { each: 0.09 },
       }, '-=0.1')
       .from('.market-attribution', {
-        autoAlpha: 0, duration: 0.3,
+        opacity: 0, duration: 0.3,
       }, '-=0.1')
     }, resultsRef)
     return () => ctx.revert()

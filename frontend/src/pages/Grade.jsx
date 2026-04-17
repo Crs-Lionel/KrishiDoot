@@ -91,14 +91,14 @@ export default function Grade() {
   const pageRef   = useRef(null)
   const resultRef = useRef(null)
 
-  /* Page entrance */
+  /* Page entrance — use opacity only (not autoAlpha) so visibility is never hidden */
   useEffect(() => {
     const ctx = gsap.context(() => {
       gsap.from('.grade-header', {
-        y: -20, autoAlpha: 0, duration: 0.5, ease: 'power3.out',
+        y: -20, opacity: 0, duration: 0.5, ease: 'power3.out',
       })
       gsap.from('.grade-upload-card', {
-        y: 24, autoAlpha: 0, duration: 0.55, ease: 'power3.out', delay: 0.1,
+        y: 24, opacity: 0, duration: 0.55, ease: 'power3.out', delay: 0.08,
       })
     }, pageRef)
     return () => ctx.revert()
@@ -112,37 +112,37 @@ export default function Grade() {
 
       /* 1. Card container fades in */
       tl.from(resultRef.current, {
-        y: 32, autoAlpha: 0, duration: 0.5,
+        y: 32, opacity: 0, duration: 0.5,
       })
       /* 2. Crop banner slides in from left */
       .from('.grade-crop-banner', {
-        x: -24, autoAlpha: 0, duration: 0.4,
+        x: -24, opacity: 0, duration: 0.4,
       }, '-=0.2')
       /* 3. Grade hero — big reveal */
       .from('.grade-hero-bg', {
-        autoAlpha: 0, duration: 0.35,
+        opacity: 0, duration: 0.35,
       }, '-=0.1')
       .from('.grade-letter', {
-        scale: 0.4, autoAlpha: 0, duration: 0.6, ease: 'power3.out',
+        scale: 0.4, opacity: 0, duration: 0.6, ease: 'power3.out',
       }, '-=0.2')
       .from('.grade-label', {
-        x: -12, autoAlpha: 0, duration: 0.35,
+        x: -12, opacity: 0, duration: 0.35,
       }, '-=0.35')
       .from('.grade-multiplier', {
-        x: 20, autoAlpha: 0, duration: 0.35,
+        x: 20, opacity: 0, duration: 0.35,
       }, '-=0.4')
       /* 4. Stats stagger up */
       .from('.grade-stat', {
-        y: 16, autoAlpha: 0, duration: 0.4,
+        y: 16, opacity: 0, duration: 0.4,
         stagger: { each: 0.08 },
       }, '-=0.15')
       /* 5. Defects + agmark note */
       .from('.grade-note', {
-        autoAlpha: 0, duration: 0.3,
+        opacity: 0, duration: 0.3,
       }, '-=0.1')
       /* 6. CTA buttons slide up last */
       .from('.grade-cta', {
-        y: 16, autoAlpha: 0, duration: 0.4,
+        y: 16, opacity: 0, duration: 0.4,
         stagger: { each: 0.07 },
       }, '-=0.1')
       /* 7. Animate confidence bar from 0 */
@@ -246,16 +246,11 @@ export default function Grade() {
           <label className="block cursor-pointer group">
             <div
               className={`relative rounded-xl border-2 border-dashed transition-all duration-300 overflow-hidden flex items-center justify-center ${
-                imagePreview
-                  ? 'border-green-500/40'
-                  : 'hover:border-green-700/50'
+                imagePreview ? 'border-green-500/50' : 'border-gray-600 group-hover:border-green-600/60'
               }`}
               style={{
                 minHeight: '190px',
-                background: imagePreview
-                  ? 'rgba(22,163,74,0.04)'
-                  : 'rgba(17,26,19,0.6)',
-                borderColor: imagePreview ? undefined : 'rgba(42,58,43,0.8)',
+                background: imagePreview ? 'rgba(22,163,74,0.04)' : 'rgba(17,26,19,0.6)',
               }}
             >
               {imagePreview ? (
