@@ -1,26 +1,25 @@
-fastapi==0.111.0
-uvicorn[standard]==0.29.0
-httpx==0.27.0
-python-dotenv==1.0.1
-pydantic==2.7.1
-pydantic-settings==2.3.4
-
+fastapi
+uvicorn[standard]
+httpx
+python-dotenv
+pydantic
+pydantic-settings
 # AI / LangGraph (pinned to compatible set)
-langgraph>=0.2.0
-langchain-core>=0.2.0
-langchain-google-genai>=1.0.7
+langgraph
+langchain-core
+langchain-google-genai
 
 # Google GenAI SDK (new, non-deprecated)
-google-genai>=0.7.0
+google-genai
 
 # Database
-supabase==2.4.6
+supabase
 
 # Telegram
-python-telegram-bot==21.3
+python-telegram-bot
 
 # Crop Journey
-feedparser>=6.0.0
+feedparser
 
 # Optional: NeMo Guardrails (install separately if needed)
 # nemoguardrails==0.9.0
