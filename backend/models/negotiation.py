@@ -34,7 +34,9 @@ class NegotiationRespondRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     session_id: str = Field(min_length=1)
-    buyer_counter_offer: float = Field(gt=0)      # ₹/kg from buyer
+    buyer_message: str = Field(min_length=1)       # Actual text from the user
+    buyer_counter_offer: Optional[float] = None    # ₹/kg from buyer (optional fallback)
+    voice_mode: bool = False                       # if True, return audio_b64 in response
 
     @field_validator("session_id", mode="before")
     @classmethod
@@ -53,6 +55,7 @@ class NegotiationStartResponse(BaseModel):
     batna_price: float = Field(ge=0)              # ₹/kg — absolute floor, NEVER go below this
     initial_ask: float = Field(ge=0)              # ₹/kg — agent's opening ask
     grade_report: Optional[dict] = None
+    audio_b64: Optional[str] = None               # base64 WAV if voice_mode was requested
 
 
 class NegotiationRespondResponse(BaseModel):
@@ -62,6 +65,7 @@ class NegotiationRespondResponse(BaseModel):
     new_ask: float = Field(ge=0)                  # ₹/kg — agent's updated ask
     status: Literal["ongoing", "agreed", "rejected"]
     final_price: Optional[float] = Field(default=None, ge=0)   # only when status == "agreed"
+    audio_b64: Optional[str] = None               # base64 WAV if voice_mode was requested
 
     @field_validator("agent_dialogue", mode="before")
     @classmethod

@@ -1,449 +1,376 @@
 import { useState, useRef, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import gsap from 'gsap'
-import axios from 'axios'
-import { ErrorAlert, SpinnerIcon } from '../components/ui.jsx'
+import { gsap } from 'gsap'
+import { Link } from 'react-router-dom'
+import { LeafIcon, AlertIcon, SpinnerIcon, ErrorAlert, INPUT_CLS, SELECT_CLS, KD_CARD, triggerConfetti, CropBadge, PriceDisplay } from '../components/ui.jsx'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// API base URL
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
+// Visual metadata for grades
 const GRADE_META = {
   A: {
-    label: 'Premium Quality',
-    sublabel: 'Agmark Grade A',
-    text: 'text-emerald-400',
-    bg: 'bg-emerald-500/10',
-    border: 'border-emerald-500/30',
-    multiplier: '1.25×',
-    multiplierNote: '+25% above market',
-    multiplierColor: 'text-emerald-400',
-    glowClass: 'glow-emerald',
-    gradientFrom: 'rgba(52,211,153,0.12)',
-    gradientTo: 'rgba(52,211,153,0)',
+    color: '#22c55e', bg: 'rgba(34,197,94,0.1)', border: 'rgba(34,197,94,0.3)',
+    label: 'Premium Quality', icon: '🌟',
+    confetti: true
   },
   B: {
-    label: 'Standard Quality',
-    sublabel: 'Agmark Grade B',
-    text: 'text-amber-400',
-    bg: 'bg-amber-500/10',
-    border: 'border-amber-500/30',
-    multiplier: '1.15×',
-    multiplierNote: '+15% above market',
-    multiplierColor: 'text-amber-400',
-    glowClass: 'glow-amber',
-    gradientFrom: 'rgba(251,191,36,0.10)',
-    gradientTo: 'rgba(251,191,36,0)',
+    color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.3)',
+    label: 'Standard Quality', icon: '👍',
+    confetti: false
   },
   C: {
-    label: 'Below Standard',
-    sublabel: 'Agmark Grade C',
-    text: 'text-red-400',
-    bg: 'bg-red-500/10',
-    border: 'border-red-500/30',
-    multiplier: '1.05×',
-    multiplierNote: '+5% above market',
-    multiplierColor: 'text-orange-400',
-    glowClass: '',
-    gradientFrom: 'rgba(248,113,113,0.08)',
-    gradientTo: 'rgba(248,113,113,0)',
-  },
-}
-
-function UploadIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-10 h-10 text-gray-600">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-    </svg>
-  )
-}
-
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-    </svg>
-  )
-}
-
-function ChevronRightIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-4 h-4">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-    </svg>
-  )
-}
-
-function ScaleIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v17.25m0 0c-1.472 0-2.882.265-4.185.75M12 20.25c1.472 0 2.882.265 4.185.75M18.75 4.97A48.416 48.416 0 0012 4.5c-2.291 0-4.545.16-6.75.47m13.5 0c1.01.143 2.01.317 3 .52m-3-.52l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.988 5.988 0 01-2.031.352 5.988 5.988 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L18.75 4.97zm-16.5.52c.99-.203 1.99-.377 3-.52m0 0l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.989 5.989 0 01-2.031.352 5.989 5.989 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L5.25 4.97z" />
-    </svg>
-  )
+    color: '#64748b', bg: 'rgba(100,116,139,0.1)', border: 'rgba(100,116,139,0.3)',
+    label: 'Fair Quality', icon: '⚠️',
+    confetti: false
+  }
 }
 
 export default function Grade() {
-  const navigate = useNavigate()
-  const [imageB64, setImageB64]         = useState(null)
-  const [imagePreview, setImagePreview] = useState(null)
-  const [result, setResult]             = useState(null)
-  const [loading, setLoading]           = useState(false)
-  const [error, setError]               = useState(null)
+  const [file, setFile] = useState(null)
+  const [preview, setPreview] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [result, setResult] = useState(null)
+  const [invalidResult, setInvalidResult] = useState(null) // non-null when image is not a crop
+  const [error, setError] = useState('')
+  const [isDragging, setIsDragging] = useState(false)
 
-  const pageRef   = useRef(null)
   const resultRef = useRef(null)
+  const confRef = useRef(null)
 
-  /* Page entrance — use opacity only (not autoAlpha) so visibility is never hidden */
-  useEffect(() => {
-    const ctx = gsap.context(() => {
-      gsap.from('.grade-header', {
-        y: -20, opacity: 0, duration: 0.5, ease: 'power3.out',
-      })
-      gsap.from('.grade-upload-card', {
-        y: 24, opacity: 0, duration: 0.55, ease: 'power3.out', delay: 0.08,
-      })
-    }, pageRef)
-    return () => ctx.revert()
-  }, [])
-
-  /* Result reveal — the key emotional moment */
-  useEffect(() => {
-    if (!result || !resultRef.current) return
-    const ctx = gsap.context(() => {
-      const tl = gsap.timeline({ defaults: { ease: 'power3.out' } })
-
-      /* 1. Card container fades in */
-      tl.from(resultRef.current, {
-        y: 32, opacity: 0, duration: 0.5,
-      })
-      /* 2. Crop banner slides in from left */
-      .from('.grade-crop-banner', {
-        x: -24, opacity: 0, duration: 0.4,
-      }, '-=0.2')
-      /* 3. Grade hero — big reveal */
-      .from('.grade-hero-bg', {
-        opacity: 0, duration: 0.35,
-      }, '-=0.1')
-      .from('.grade-letter', {
-        scale: 0.4, opacity: 0, duration: 0.6, ease: 'power3.out',
-      }, '-=0.2')
-      .from('.grade-label', {
-        x: -12, opacity: 0, duration: 0.35,
-      }, '-=0.35')
-      .from('.grade-multiplier', {
-        x: 20, opacity: 0, duration: 0.35,
-      }, '-=0.4')
-      /* 4. Stats stagger up */
-      .from('.grade-stat', {
-        y: 16, opacity: 0, duration: 0.4,
-        stagger: { each: 0.08 },
-      }, '-=0.15')
-      /* 5. Defects + agmark note */
-      .from('.grade-note', {
-        opacity: 0, duration: 0.3,
-      }, '-=0.1')
-      /* 6. CTA buttons slide up last */
-      .from('.grade-cta', {
-        y: 16, opacity: 0, duration: 0.4,
-        stagger: { each: 0.07 },
-      }, '-=0.1')
-      /* 7. Animate confidence bar from 0 */
-      if (result) {
-        gsap.fromTo('.grade-confidence-bar', {
-          width: '0%',
-        }, {
-          width: `${(result.confidence * 100).toFixed(0)}%`,
-          duration: 0.9, ease: 'power2.out', delay: 0.65,
-        })
-      }
-    }, resultRef)
-    return () => ctx.revert()
-  }, [result])
-
-  const handleImageChange = (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onloadend = () => {
-      setImagePreview(reader.result)
-      setImageB64(reader.result.split(',')[1])
-      setResult(null)
-      setError(null)
+  // Upload handler
+  const handleFile = (selectedFile) => {
+    if (!selectedFile) return
+    if (!selectedFile.type.startsWith('image/')) {
+      setError('Please select an image file.')
+      return
     }
-    reader.readAsDataURL(file)
+    setFile(selectedFile)
+    setPreview(URL.createObjectURL(selectedFile))
+    setResult(null)
+    setInvalidResult(null)
+    setError('')
   }
 
-  const handleGrade = async () => {
+  // Drag and drop events
+  const onDragOver = (e) => { e.preventDefault(); setIsDragging(true) }
+  const onDragLeave = (e) => { e.preventDefault(); setIsDragging(false) }
+  const onDrop = (e) => {
+    e.preventDefault()
+    setIsDragging(false)
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFile(e.dataTransfer.files[0])
+    }
+  }
+
+  // Convert file to base64
+  const fileToBase64 = (f) => new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result.split(',')[1]) // strip data:... prefix
+    reader.onerror = reject
+    reader.readAsDataURL(f)
+  })
+
+  // Form submission
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!file) return
     setLoading(true)
-    setError(null)
+    setError('')
+    setResult(null)
+    setInvalidResult(null)
+
     try {
-      const res = await axios.post(`${API}/grade/crop`, { image_b64: imageB64, crop_type: 'auto' })
-      setResult(res.data)
-    } catch (e) {
-      setError(e.response?.data?.detail || e.message)
+      const image_b64 = await fileToBase64(file)
+
+      const res = await fetch(`${API_BASE}/grade/crop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image_b64, crop_type: 'auto' }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || 'Grading failed')
+
+      // Image is not a crop — show plain rejection message
+      if (!data.is_valid) {
+        setInvalidResult(data.invalid_reason || 'This image does not appear to be a crop, vegetable, or fruit.')
+        return
+      }
+
+      // Map backend GradeResponse → UI shape
+      const priceParts = (data.estimated_price_band || '0-0').match(/[\d.]+/g) || ['0','0']
+      setResult({
+        crop: data.detected_crop_type || 'Unknown',
+        grade: data.grade,
+        confidence: data.confidence,
+        reasoning: data.agmark_standard,
+        findings: {
+          positive: data.defects.length === 0 ? ['No defects detected'] : [],
+          negative: data.defects,
+        },
+        price_estimate: {
+          min: parseFloat(priceParts[0]),
+          max: parseFloat(priceParts[1] || priceParts[0]),
+        },
+      })
+    } catch (err) {
+      setError(err.message)
     } finally {
       setLoading(false)
     }
   }
 
-  const startNegotiation = () => {
-    const crop_type = result.detected_crop_type || 'tomato'
-    localStorage.setItem('kd_grade', JSON.stringify({ grade: result, crop_type }))
-    localStorage.setItem('kd_autostart', '1')
-    navigate('/negotiate')
-  }
+  // Animate result reveal
+  useEffect(() => {
+    if (result && resultRef.current) {
+      const gMeta = GRADE_META[result.grade] || GRADE_META.C
 
-  const goNegotiate = () => {
-    const crop_type = result.detected_crop_type || 'tomato'
-    localStorage.setItem('kd_grade', JSON.stringify({ grade: result, crop_type }))
-    navigate('/negotiate')
-  }
+      const ctx = gsap.context(() => {
+        gsap.fromTo(resultRef.current,
+          { opacity: 0, y: 30, scale: 0.95 },
+          { opacity: 1, y: 0, scale: 1, duration: 0.8, ease: 'back.out(1.2)' }
+        )
+        
+        // Confidence bar animation
+        if (confRef.current) {
+          gsap.fromTo(confRef.current,
+            { width: '0%' },
+            { width: `${result.confidence * 100}%`, duration: 1.5, ease: 'power3.out', delay: 0.3 }
+          )
+        }
+      })
 
-  const meta = result ? GRADE_META[result.grade] : null
-  const detectedCrop = result?.detected_crop_type
-    ? result.detected_crop_type.charAt(0).toUpperCase() + result.detected_crop_type.slice(1)
-    : null
+      // Trigger confetti for Grade A
+      if (gMeta.confetti) {
+        setTimeout(() => triggerConfetti(resultRef.current), 300)
+      }
+
+      return () => ctx.revert()
+    }
+  }, [result])
 
   return (
-    <div ref={pageRef} className="pt-6 pb-4 space-y-4">
-
-      {/* ── Header ──────────────────────────────────────────────── */}
-      <div className="grade-header">
-        <h1 className="text-xl font-display font-bold text-white tracking-tight">Crop Grading</h1>
-        <p className="text-sm text-gray-400 mt-0.5 leading-relaxed">
-          AI identifies your crop and assigns Agmark grade — sets your negotiation opening price automatically.
+    <div className="pt-6 pb-20 animate-in fade-in duration-500">
+      
+      {/* HEADER */}
+      <div className="mb-8">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold mb-3"
+             style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.2)' }}>
+          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+          Gemini Vision API
+        </div>
+        <h1 className="text-3xl font-black font-display tracking-tight mb-2" style={{ color: 'var(--text-primary)' }}>Agmark AI Grading</h1>
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          Upload a clear photo of your harvest. The AI will assess quality, spot defects, and estimate your fair price.
         </p>
       </div>
 
-      {/* ── Upload card ─────────────────────────────────────────── */}
-      <div
-        className="grade-upload-card border rounded-2xl p-4 space-y-4"
-        style={{
-          background: 'linear-gradient(145deg, #0d1410 0%, #111a13 100%)',
-          borderColor: 'rgba(42,58,43,0.7)',
-        }}
-      >
-        {/* Auto-detect badge */}
-        <div
-          className="flex items-center gap-2.5 rounded-xl px-3 py-2.5"
-          style={{ background: 'rgba(22,163,74,0.06)', border: '1px solid rgba(22,163,74,0.15)' }}
-        >
-          <div className="w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: 'rgba(22,163,74,0.15)' }}>
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-3.5 h-3.5 text-green-400">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.75H6A2.25 2.25 0 003.75 6v1.5M16.5 3.75H18A2.25 2.25 0 0120.25 6v1.5m0 9V18A2.25 2.25 0 0118 20.25h-1.5m-9 0H6A2.25 2.25 0 013.75 18v-1.5M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold text-green-400 font-display">Gemini Auto-Detection</p>
-            <p className="text-[11px] text-gray-500 mt-0.5">Identifies crop · assigns Agmark grade · sets negotiation price</p>
-          </div>
-        </div>
+      <ErrorAlert error={error} />
 
-        {/* Image upload */}
-        <div>
-          <label className="block text-[11px] font-semibold text-gray-500 mb-2 uppercase tracking-widest font-display">
-            Crop Photo
-          </label>
-          <label className="block cursor-pointer group">
-            <div
-              className={`relative rounded-xl border-2 border-dashed transition-all duration-300 overflow-hidden flex items-center justify-center ${
-                imagePreview ? 'border-green-500/50' : 'border-gray-600 group-hover:border-green-600/60'
-              }`}
-              style={{
-                minHeight: '190px',
-                background: imagePreview ? 'rgba(22,163,74,0.04)' : 'rgba(17,26,19,0.6)',
-              }}
-            >
-              {imagePreview ? (
-                <img src={imagePreview} alt="crop preview" className="max-h-52 w-full object-contain p-3" />
-              ) : (
-                <div className="flex flex-col items-center gap-3 py-8 px-4 text-center">
-                  <div
-                    className="w-16 h-16 rounded-2xl flex items-center justify-center transition-all duration-200 group-hover:scale-105"
-                    style={{ background: 'rgba(24,32,25,0.8)', border: '1px solid rgba(42,58,43,0.6)' }}
-                  >
-                    <UploadIcon />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-400">Tap to take photo or upload</p>
-                    <p className="text-xs text-gray-600 mt-0.5">Opens rear camera on mobile</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Loading overlay */}
-              {loading && (
-                <div className="absolute inset-0 flex flex-col items-center justify-center gap-3"
-                  style={{ background: 'rgba(8,12,9,0.85)' }}>
-                  <div className="relative">
-                    <div className="w-14 h-14 rounded-full border-2 border-green-500/15 animate-ping absolute inset-0" />
-                    <div className="w-14 h-14 rounded-full border-2 border-green-500/30 animate-pulse" />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <SpinnerIcon />
+      {/* UPLOAD FORM */}
+      <div className={`${KD_CARD} p-5 mt-4`}>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          
+          <div 
+            className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300 ${
+              isDragging ? 'border-green-500 bg-green-500/5' : 'border-[var(--border-card)]'
+            }`}
+            style={{ 
+              backgroundColor: preview ? 'transparent' : 'var(--input-bg)',
+              borderColor: preview ? 'var(--border-subtle)' : undefined
+            }}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+          >
+            {preview ? (
+              <div className="relative w-full aspect-video rounded-xl overflow-hidden shadow-lg border" style={{ borderColor: 'var(--border-subtle)' }}>
+                <img src={preview} alt="Crop Preview" className="w-full h-full object-cover" />
+                
+                {/* Custom scanning animation over image when loading */}
+                {loading && (
+                  <>
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-all" />
+                    <div className="absolute inset-0 flex flex-col items-center justify-center z-20">
+                      <SpinnerIcon className="w-8 h-8 text-green-400 mb-3" />
+                      <p className="text-white font-bold tracking-widest text-xs uppercase animate-pulse">Analyzing crop...</p>
                     </div>
-                  </div>
-                  <p className="text-xs text-green-400 font-semibold font-display">Gemini is analysing your crop…</p>
+                    <div className="scan-line-el" />
+                  </>
+                )}
+                
+                <button
+                  type="button"
+                  onClick={() => { setFile(null); setPreview(null); setResult(null); }}
+                  disabled={loading}
+                  className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-red-500 transition-colors backdrop-blur-md"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <label className="cursor-pointer flex flex-col items-center group">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4 transition-transform group-hover:scale-110"
+                     style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e' }}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-8 h-8">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
+                  </svg>
                 </div>
-              )}
-            </div>
-            <input type="file" accept="image/*" capture="environment" onChange={handleImageChange} className="hidden" />
-          </label>
-        </div>
+                <p className="text-sm font-bold font-display" style={{ color: 'var(--text-primary)' }}>Tap to take photo or upload</p>
+                <p className="text-xs mt-1.5" style={{ color: 'var(--text-muted)' }}>Good lighting gets better results</p>
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} disabled={loading} />
+              </label>
+            )}
+          </div>
 
-        <ErrorAlert error={error} />
-
-        <button
-          onClick={handleGrade}
-          disabled={!imageB64 || loading}
-          className="w-full text-white py-3.5 rounded-xl text-sm font-semibold font-display disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-opacity duration-150"
-          style={{
-            background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
-            boxShadow: (!imageB64 || loading) ? 'none' : '0 4px 20px rgba(22,163,74,0.3)',
-          }}
-        >
-          {loading ? <><SpinnerIcon /> Analysing crop…</> : 'Analyse Crop with AI'}
-        </button>
+          <button
+            type="submit"
+            disabled={!file || loading}
+            className="w-full kd-btn-primary text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all"
+          >
+            {loading ? (
+              <>
+                <SpinnerIcon /> Processing...
+              </>
+            ) : (
+              'Analyze Quality'
+            )}
+          </button>
+        </form>
       </div>
 
-      {/* ── Result card ─────────────────────────────────────────── */}
-      {result && meta && (
-        <div
-          ref={resultRef}
-          className={`border rounded-2xl p-4 space-y-4 ${meta.glowClass}`}
-          style={{
-            background: `linear-gradient(145deg, ${meta.gradientFrom} 0%, #0d1410 40%)`,
-            borderColor: 'rgba(42,58,43,0.7)',
-          }}
-        >
-          {/* Detected crop banner */}
-          {detectedCrop && (
-            <div
-              className="grade-crop-banner flex items-center gap-3 rounded-xl px-3 py-2.5"
-              style={{ background: 'rgba(24,32,25,0.9)', border: '1px solid rgba(42,58,43,0.8)' }}
-            >
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                style={{ background: 'rgba(22,163,74,0.12)' }}>
-                <svg viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4 text-green-400">
-                  <path d="M17 8C8 10 5.9 16.17 3.82 19.82L5.71 21l1-1.73c.97.53 1.94.83 2.79.83 4 0 7-4 7-9 0-.9-.17-1.77-.5-2.56 2.3 1.93 3.7 4.8 3.7 7.96 0 2.42-.83 4.65-2.2 6.41L19 24c1.81-2.22 2.9-5.07 2.9-8.18C21.9 10.55 19.95 6.76 17 4V8z"/>
-                </svg>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-widest font-display">Crop Detected</p>
-                <p className="text-sm font-bold text-white font-display">{detectedCrop}</p>
-              </div>
-              <div className={`w-5 h-5 rounded-full flex items-center justify-center ${meta.bg} flex-shrink-0`}>
-                <CheckIcon />
-              </div>
-            </div>
-          )}
-
-          {/* Grade hero — dramatic */}
-          <div
-            className={`grade-hero-bg relative overflow-hidden flex items-center justify-between px-5 py-5 rounded-2xl border ${meta.bg} ${meta.border}`}
-          >
-            {/* Ghost letter watermark */}
-            <div
-              className="absolute right-4 top-1/2 -translate-y-1/2 select-none pointer-events-none font-display font-black"
-              style={{ fontSize: '7rem', opacity: 0.06, lineHeight: 1 }}
-            >
-              {result.grade}
-            </div>
-
-            <div className="relative">
-              <p className="grade-label text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-1.5 font-display">
-                Agmark Grade
-              </p>
-              <p className={`grade-letter text-5xl font-black font-display ${meta.text}`}
-                style={{ lineHeight: 1 }}>
-                {result.grade}
-              </p>
-              <p className={`grade-label text-xs font-semibold mt-1.5 ${meta.text} opacity-80 font-display`}>
-                {meta.label}
-              </p>
-            </div>
-
-            <div className="relative text-right">
-              <div
-                className={`grade-multiplier inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-bold font-display ${meta.bg} ${meta.border} ${meta.text} mb-1.5`}
-              >
-                {meta.multiplier} market price
-              </div>
-              <p className={`grade-label text-xs font-medium ${meta.multiplierColor}`}>{meta.multiplierNote}</p>
-            </div>
-          </div>
-
-          {/* Stats grid */}
-          <div className="grid grid-cols-2 gap-2.5">
-            <div
-              className="grade-stat rounded-xl p-3"
-              style={{ background: 'rgba(24,32,25,0.8)', border: '1px solid rgba(42,58,43,0.6)' }}
-            >
-              <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-widest font-display">Estimated Price</p>
-              <p className="text-sm font-bold text-white mt-1 font-display">{result.estimated_price_band}</p>
-            </div>
-            <div
-              className="grade-stat rounded-xl p-3"
-              style={{ background: 'rgba(24,32,25,0.8)', border: '1px solid rgba(42,58,43,0.6)' }}
-            >
-              <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-widest font-display">AI Confidence</p>
-              <div className="flex items-end gap-1.5 mt-1">
-                <p className="text-sm font-bold text-white font-display">{(result.confidence * 100).toFixed(0)}%</p>
-                <div className="flex-1 h-1.5 rounded-full overflow-hidden mb-0.5"
-                  style={{ background: 'rgba(42,58,43,0.5)' }}>
-                  <div
-                    className="grade-confidence-bar h-full bg-green-500 rounded-full"
-                    style={{ width: `${result.confidence * 100}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Agmark note */}
-          <p className="grade-note text-xs text-gray-500 leading-relaxed">{result.agmark_standard}</p>
-
-          {/* Defects */}
-          {result.defects.length > 0 && (
-            <div className="grade-note">
-              <p className="text-[10px] font-semibold text-gray-400 mb-2 uppercase tracking-widest font-display">Defects Detected</p>
-              <div className="flex flex-wrap gap-1.5">
-                {result.defects.map((d, i) => (
-                  <span key={i} className="inline-flex items-center gap-1 text-xs text-red-400 bg-red-500/10 border border-red-500/20 px-2.5 py-1 rounded-full">
-                    <span className="w-1 h-1 bg-red-400 rounded-full" />
-                    {d}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* CTA */}
-          <div className="space-y-2 pt-1">
-            <button
-              onClick={startNegotiation}
-              className="grade-cta w-full text-white py-3.5 rounded-xl text-sm font-bold font-display flex items-center justify-center gap-2 transition-opacity duration-150"
-              style={{
-                background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
-                boxShadow: '0 4px 24px rgba(22,163,74,0.28)',
-              }}
-            >
-              <ScaleIcon />
-              Start Negotiation — {meta.multiplier} Opening Ask
-              <ChevronRightIcon />
-            </button>
-            <button
-              onClick={goNegotiate}
-              className="grade-cta w-full py-2.5 rounded-xl text-xs font-medium text-gray-400 hover:text-gray-200 transition-colors duration-150"
-              style={{ background: 'rgba(24,32,25,0.7)', border: '1px solid rgba(42,58,43,0.6)' }}
-            >
-              Customize negotiation settings first
-            </button>
+      {/* INVALID IMAGE MESSAGE */}
+      {invalidResult && (
+        <div className="mt-6 flex items-start gap-3 p-4 rounded-2xl"
+             style={{ background: 'rgba(239,68,68,0.08)', border: '1.5px solid rgba(239,68,68,0.25)' }}>
+          <span className="text-2xl flex-shrink-0 mt-0.5">🚫</span>
+          <div>
+            <p className="font-bold text-sm" style={{ color: '#f87171' }}>Image Not Applicable</p>
+            <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>{invalidResult}</p>
+            <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>Please upload a clear photo of a vegetable, fruit, or grain crop for Agmark grading.</p>
           </div>
         </div>
       )}
 
-      <p className="text-[11px] text-gray-700 text-center leading-relaxed pb-2">
-        Photos analysed by Gemini Vision · Not stored · DPDP Act 2023 compliant
-      </p>
+      {/* RESULTS */}
+      {result && (
+        <div ref={resultRef} className="mt-8 space-y-4 relative">
+          
+          {/* Main Grade Card */}
+          <div className="p-6 rounded-2xl relative overflow-hidden"
+               style={{ 
+                 background: GRADE_META[result.grade].bg, 
+                 border: `1.5px solid ${GRADE_META[result.grade].border}`,
+                 boxShadow: result.grade === 'A' ? 'var(--glow-green)' : 'var(--shadow-card)'
+               }}>
+            
+            {/* Background glow if grade A */}
+            {result.grade === 'A' && (
+              <div className="absolute top-0 right-0 w-64 h-64 bg-green-500 rounded-full mix-blend-overlay blur-3xl opacity-20 pointer-events-none" />
+            )}
+
+            <div className="flex items-start justify-between relative z-10">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest mb-1 font-display" style={{ color: 'var(--text-muted)' }}>Detected Crop</p>
+                <div className="flex items-center gap-2 mb-4">
+                  <CropBadge crop={result.crop} />
+                </div>
+                
+                <p className="text-xs font-bold uppercase tracking-widest mb-1 mt-4 font-display" style={{ color: 'var(--text-muted)' }}>Agmark Grade</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-white shadow-sm"
+                       style={{ color: GRADE_META[result.grade].color }}>
+                    <span className="text-3xl font-black font-display">{result.grade}</span>
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
+                      {GRADE_META[result.grade].label} {GRADE_META[result.grade].icon}
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>Based on visual characteristics</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Confidence Bar */}
+            <div className="mt-6 pt-5" style={{ borderTop: `1px solid ${GRADE_META[result.grade].border}` }}>
+              <div className="flex justify-between items-end mb-2">
+                <span className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>AI Confidence</span>
+                <span className="text-sm font-bold font-mono" style={{ color: GRADE_META[result.grade].color }}>
+                  {(result.confidence * 100).toFixed(1)}%
+                </span>
+              </div>
+              <div className="h-2 rounded-full overflow-hidden bg-black/10" style={{ background: 'var(--input-bg)' }}>
+                <div 
+                  ref={confRef}
+                  className="h-full rounded-full transition-all duration-1000"
+                  style={{ background: GRADE_META[result.grade].color, width: '0%' }}
+                />
+              </div>
+              <div className="flex justify-between mt-1 px-1">
+                <span className="text-[10px]" style={{ color: 'var(--text-faint)' }}>0%</span>
+                <span className="text-[10px]" style={{ color: 'var(--text-faint)' }}>50%</span>
+                <span className="text-[10px]" style={{ color: 'var(--text-faint)' }}>100%</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Details & Findings */}
+          <div className={`${KD_CARD} p-5`}>
+            <p className="text-xs font-bold uppercase tracking-widest mb-4 font-display" style={{ color: 'var(--text-muted)' }}>Analysis Details</p>
+            <p className="text-sm leading-relaxed mb-6" style={{ color: 'var(--text-primary)' }}>{result.reasoning}</p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-xl" style={{ background: 'var(--bg-card-2)', border: '1px solid var(--border-subtle)' }}>
+                <div className="flex items-center gap-1.5 mb-1 text-green-500">
+                  <span className="text-sm">✅</span>
+                  <span className="text-xs font-bold">Good Signs</span>
+                </div>
+                <ul className="text-xs space-y-1.5 mt-2" style={{ color: 'var(--text-secondary)' }}>
+                  {result.findings.positive.map((p, i) => (
+                    <li key={i} className="flex gap-1.5"><span className="opacity-50">•</span>{p}</li>
+                  ))}
+                  {result.findings.positive.length === 0 && <li className="italic opacity-50">None highlighted</li>}
+                </ul>
+              </div>
+              <div className="p-3 rounded-xl" style={{ background: 'var(--bg-card-2)', border: '1px solid var(--border-subtle)' }}>
+                <div className="flex items-center gap-1.5 mb-1 text-red-400">
+                  <span className="text-sm">⚠️</span>
+                  <span className="text-xs font-bold">Issues</span>
+                </div>
+                <ul className="text-xs space-y-1.5 mt-2" style={{ color: 'var(--text-secondary)' }}>
+                  {result.findings.negative.map((n, i) => (
+                    <li key={i} className="flex gap-1.5"><span className="opacity-50">•</span>{n}</li>
+                  ))}
+                  {result.findings.negative.length === 0 && <li className="italic opacity-50">None detected</li>}
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Price Range & CTA */}
+          <div className="p-6 rounded-2xl bg-gradient-to-br from-amber-500/10 to-orange-600/10 border border-amber-500/30">
+            <p className="text-xs font-bold uppercase tracking-widest text-amber-500/80 mb-2 font-display">Estimated Market Value</p>
+            <div className="flex items-baseline gap-2 mb-4">
+              <PriceDisplay amount={result.price_estimate.min} size="lg" className="text-amber-500" unit={false} />
+              <span className="text-amber-500/50 font-medium">—</span>
+              <PriceDisplay amount={result.price_estimate.max} size="lg" className="text-amber-500" unit="/kg" />
+            </div>
+            
+            <p className="text-xs text-amber-500/80 mb-5 max-w-[280px]">
+              Based on live APMC data for Grade {result.grade} {result.crop}. Use this as your starting point for negotiation.
+            </p>
+
+            <Link 
+              to={`/negotiate?crop=${result.crop}&grade=${result.grade}`}
+              className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-95"
+            >
+              Start Negotiation 🤝
+            </Link>
+          </div>
+
+        </div>
+      )}
     </div>
   )
 }

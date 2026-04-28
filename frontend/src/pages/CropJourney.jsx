@@ -1,1381 +1,591 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
-import axios from 'axios'
-import jsPDF from 'jspdf'
-import { ErrorAlert, SpinnerIcon } from '../components/ui.jsx'
+import { gsap } from 'gsap'
+import { AlertIcon, SpinnerIcon, ErrorAlert, INPUT_CLS, KD_CARD, ProgressRing, CropBadge } from '../components/ui.jsx'
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-const CROP_EMOJI = {
-  wheat: '🌾', rice: '🍚', tomato: '🍅', onion: '🧅', potato: '🥔',
-  cotton: '🌿', maize: '🌽', soybean: '🫘', mustard: '🌼', gram: '🫛',
-  sugarcane: '🍬', groundnut: '🥜',
-}
-const cropEmoji = (c) => CROP_EMOJI[c?.toLowerCase()] || '🌱'
+export default function CropJourney() {
+  const [step, setStep] = useState('intro') // intro, questions, loading, result, dashboard
+  const [location, setLocation] = useState('')
+  const [landPhoto, setLandPhoto] = useState(null) // base64 string
+  const [landPhotoPreview, setLandPhotoPreview] = useState(null) // preview URL
+  const [questions, setQuestions] = useState([])
+  const [answers, setAnswers] = useState({})
+  const [recommendation, setRecommendation] = useState(null)
+  const [plan, setPlan] = useState(null)
+  const [activeTab, setActiveTab] = useState('tasks') // tasks, subsidies, report
+  const [error, setError] = useState('')
+  const [loadingMsg, setLoadingMsg] = useState('')
 
-const TASK_ICON = {
-  sowing: '🌱', irrigation: '💧', fertilizer: '⚗️',
-  pesticide: '🧪', weeding: '✂️', observation: '👁️', harvest: '🌾',
-}
-const WEATHER_ICON = (w) => {
-  if (!w) return '🌤️'
-  if (w.frost_risk) return '🥶'
-  if (w.heat_stress) return '🌡️'
-  if ((w.rain_mm_week || 0) > 30) return '🌧️'
-  if ((w.rain_mm_week || 0) > 10) return '🌦️'
-  if ((w.humidity_pct || 60) > 80) return '🌫️'
-  return '☀️'
-}
+  const containerRef = useRef(null)
+  const fileInputRef = useRef(null)
 
-const MONTHS = ['January','February','March','April','May','June',
-  'July','August','September','October','November','December']
+  // Handle land photo selection
+  const handlePhotoSelect = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Photo must be under 10MB')
+      return
+    }
+    setLandPhotoPreview(URL.createObjectURL(file))
+    const reader = new FileReader()
+    reader.onload = () => setLandPhoto(reader.result)
+    reader.readAsDataURL(file)
+  }
 
-const CHEM_TYPE_COLOR = {
-  fertilizer: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20',
-  pesticide:  'bg-orange-500/15 text-orange-300 border-orange-500/20',
-  fungicide:  'bg-purple-500/15 text-purple-300 border-purple-500/20',
-  herbicide:  'bg-yellow-500/15 text-yellow-300 border-yellow-500/20',
-  insecticide:'bg-red-500/15 text-red-300 border-red-500/20',
-}
-const CHEM_ICON = { fertilizer:'⚗️', pesticide:'🧪', fungicide:'🔬', herbicide:'✂️', insecticide:'🐛' }
+  const removePhoto = () => {
+    setLandPhoto(null)
+    setLandPhotoPreview(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
 
-function ChemicalDetail({ chemicals }) {
-  const [open, setOpen] = useState(false)
-  if (!chemicals?.length) return null
+  // Subsidies Mock Data based on state
+  const mockSubsidies = [
+    { title: 'PM-KISAN', desc: '₹6,000/year income support for landholding farmer families.', link: '#' },
+    { title: 'Pradhan Mantri Fasal Bima Yojana', desc: 'Comprehensive crop insurance against non-preventable natural risks.', link: '#' },
+    { title: 'Soil Health Card Scheme', desc: 'Free soil testing and customized crop/fertilizer recommendations.', link: '#' },
+    { title: 'PM Krishi Sinchayee Yojana', desc: 'Subsidy for micro-irrigation (drip/sprinkler) up to 55%.', link: '#' }
+  ]
+
+  // Animations on step change
+  useEffect(() => {
+    if (containerRef.current) {
+      gsap.fromTo(containerRef.current,
+        { opacity: 0, y: 15 },
+        { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' }
+      )
+    }
+  }, [step, activeTab])
+
+  // Get Questions
+  const handleStart = async (e) => {
+    e.preventDefault()
+    if (!location.trim()) return
+    setError('')
+    setLoadingMsg(landPhoto ? 'Analyzing your land photo, soil & weather...' : 'Analyzing soil and weather history...')
+    setStep('loading')
+    
+    try {
+      const currentMonth = new Date().getMonth() + 1
+      const payload = { location, month: currentMonth }
+      if (landPhoto) payload.land_photo_b64 = landPhoto
+      const res = await fetch(`${API_BASE}/crop-journey/questions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || 'Failed')
+      
+      const qs = data.questions || []
+      setQuestions(qs)
+      
+      // Auto-fill answers: use detected_from_photo if AI detected from land image,
+      // otherwise default to first option for choice questions
+      const initialAnswers = {}
+      qs.forEach((q, i) => {
+        const qId = q.id || `q_${i}`
+        q.id = qId
+        if (q.detected_from_photo && q.options?.includes(q.detected_from_photo)) {
+          initialAnswers[qId] = q.detected_from_photo
+        } else if (q.options && q.options.length > 0) {
+          initialAnswers[qId] = q.options[0]
+        }
+      })
+      setAnswers(initialAnswers)
+      
+      setStep('questions')
+    } catch (err) {
+      setError(err.message)
+      setStep('intro')
+    }
+  }
+
+  // Get Recommendation
+  const handleSubmitAnswers = async () => {
+    setError('')
+    setLoadingMsg('Computing optimal crop using agronomy models...')
+    setStep('loading')
+    try {
+      const currentMonth = new Date().getMonth() + 1
+      const res = await fetch(`${API_BASE}/crop-journey/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location, month: currentMonth, answers, ...(landPhoto ? { land_photo_b64: landPhoto } : {}) })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || 'Failed')
+      
+      // Map backend recommendation → UI shape
+      const rec = data.recommendation || data
+      setRecommendation({
+        crop: rec.recommended_crop || rec.crop || rec.crop_type || 'Unknown',
+        confidence: (rec.confidence || 85) / 100,
+        metrics: {
+          water: rec.water_requirement || rec.water || 'Moderate',
+          duration: rec.duration || rec.growth_period || '90-120 days',
+        },
+        reasons: rec.key_risks || rec.reasons || (rec.why_this_crop ? [rec.why_this_crop] : ['Best fit for your soil and climate']),
+      })
+      setStep('result')
+    } catch (err) {
+      setError(err.message)
+      setStep('questions')
+    }
+  }
+
+  const handleGeneratePlan = async () => {
+    setError('')
+    setLoadingMsg(`Generating weekly task schedule for ${recommendation.crop}...`)
+    setStep('loading')
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const res = await fetch(`${API_BASE}/crop-journey/start`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          location,
+          crop_type: recommendation.crop,
+          sowing_date: today,
+          land_size_acres: 2.0,
+          irrigation_type: answers.irrigation || 'rainfed',
+          answers,
+          farmer_id: 'web_user_' + Date.now(),
+        })
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || 'Failed')
+      
+      // After /start, fetch the full journey data to get task_calendar
+      const journeyRes = await fetch(`${API_BASE}/crop-journey/${data.journey_id}`)
+      const journeyData = await journeyRes.json()
+      
+      const calendar = journeyData.task_calendar || []
+      const initializedPlan = calendar.map(week => ({
+        ...week,
+        tasks: (week.tasks || []).map((t, ti) => ({
+          ...t,
+          desc: t.task || t.desc || t.description || `Task ${ti+1}`,
+          completed: false
+        }))
+      }))
+      setPlan(initializedPlan)
+      setStep('dashboard')
+    } catch (err) {
+      setError(err.message)
+      setStep('result')
+    }
+  }
+
+  // Toggle task completion with animation
+  const toggleTask = (weekIdx, taskIdx) => {
+    const newPlan = [...plan]
+    newPlan[weekIdx].tasks[taskIdx].completed = !newPlan[weekIdx].tasks[taskIdx].completed
+    setPlan(newPlan)
+    
+    // Add simple spring effect if completed
+    if (newPlan[weekIdx].tasks[taskIdx].completed) {
+      gsap.fromTo(`.task-row-${weekIdx}-${taskIdx}`, 
+        { scale: 0.98, backgroundColor: 'rgba(34,197,94,0.2)' }, 
+        { scale: 1, backgroundColor: 'transparent', duration: 0.4, ease: 'elastic.out(1, 0.5)' }
+      )
+    }
+  }
+
+  // Calculate completion percentage
+  const getProgress = () => {
+    if (!plan) return 0
+    let total = 0
+    let done = 0
+    plan.forEach(w => w.tasks.forEach(t => { total++; if (t.completed) done++; }))
+    return total === 0 ? 0 : Math.round((done / total) * 100)
+  }
+
   return (
-    <div className="mt-2">
-      <button onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
-        className="flex items-center gap-1.5 text-[10px] text-amber-400 hover:text-amber-300 transition">
-        {open ? '▾' : '▸'} Rasayan & Urvarak Details ({chemicals.length})
-      </button>
-      {open && (
-        <div className="mt-1.5 space-y-1.5" onClick={e => e.stopPropagation()}>
-          {chemicals.map((c, i) => {
-            const colorCls = CHEM_TYPE_COLOR[c.type] || 'bg-gray-700/50 text-gray-300 border-gray-600/30'
-            const icon = CHEM_ICON[c.type] || '⚗️'
-            return (
-              <div key={i} className={`rounded-lg border p-2.5 space-y-1 ${colorCls}`}>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span>{icon}</span>
-                  <span className="font-semibold text-[11px]">{c.name}</span>
-                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wide border ${colorCls}`}>
-                    {c.type}
+    <div className="pt-6 pb-24 min-h-[calc(100vh-64px)] animate-in fade-in duration-500 flex flex-col" ref={containerRef}>
+      
+      {/* HEADER */}
+      <div className="mb-6 flex-shrink-0">
+        <h1 className="text-3xl font-black font-display tracking-tight mb-2" style={{ color: 'var(--text-primary)' }}>Crop Journey AI</h1>
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>From deciding what to plant to managing the final harvest.</p>
+      </div>
+
+      <ErrorAlert error={error} />
+
+      {/* STEP: INTRO */}
+      {step === 'intro' && (
+        <div className="flex-1 flex flex-col justify-center max-w-md mx-auto w-full">
+          <div className="text-center mb-10">
+            <div className="w-24 h-24 mx-auto bg-gradient-to-br from-green-400 to-green-600 rounded-[2rem] flex items-center justify-center text-white mb-6 shadow-xl transform rotate-3">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-12 h-12 -rotate-3">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z" />
+              </svg>
+            </div>
+            <h2 className="text-2xl font-black font-display mb-3" style={{ color: 'var(--text-primary)' }}>Your digital farm manager</h2>
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              We analyze local weather, soil data, and market demand to suggest the most profitable crop, then guide you week by week.
+            </p>
+          </div>
+
+          <form onSubmit={handleStart} className={`${KD_CARD} p-6`}>
+            <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Your Farm Location</label>
+            <div className="relative mb-5">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xl">📍</span>
+              <input
+                type="text"
+                placeholder="e.g. Pune, Maharashtra"
+                value={location}
+                onChange={e => setLocation(e.target.value)}
+                className={`${INPUT_CLS} pl-11`}
+                required
+              />
+            </div>
+
+            {/* Land Photo Upload */}
+            <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>
+              Land / Soil Photo <span className="font-normal normal-case tracking-normal" style={{ color: 'var(--text-faint)' }}>(optional — AI auto-detects soil)</span>
+            </label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handlePhotoSelect}
+              className="hidden"
+              id="land-photo-input"
+            />
+
+            {!landPhotoPreview ? (
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full mb-5 rounded-xl border-2 border-dashed py-6 flex flex-col items-center gap-2 transition-all hover:border-green-500/50 hover:bg-green-500/5 group cursor-pointer"
+                style={{ borderColor: 'var(--border-subtle)' }}
+              >
+                <div className="w-12 h-12 rounded-full bg-green-500/10 flex items-center justify-center text-green-500 group-hover:scale-110 transition-transform">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-6 h-6">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
+                  </svg>
+                </div>
+                <span className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>Tap to upload or take photo</span>
+                <span className="text-[10px]" style={{ color: 'var(--text-faint)' }}>AI will detect soil type, terrain & conditions</span>
+              </button>
+            ) : (
+              <div className="relative mb-5 rounded-xl overflow-hidden border" style={{ borderColor: 'var(--border-subtle)' }}>
+                <img src={landPhotoPreview} alt="Land photo" className="w-full h-40 object-cover" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                <div className="absolute bottom-2 left-3 flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-green-400 bg-black/40 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3 h-3">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                    </svg>
+                    Photo ready for AI analysis
                   </span>
                 </div>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-gray-300">
-                  <div><span className="text-gray-500">Matra:</span> {c.quantity_per_acre}</div>
-                  {c.dilution && <div><span className="text-gray-500">Ghol:</span> {c.dilution}</div>}
-                  {c.cost_approx && <div><span className="text-gray-500">Keemat:</span> {c.cost_approx}</div>}
-                  {c.timing && <div><span className="text-gray-500">Samay:</span> {c.timing}</div>}
-                </div>
-                {c.application_method && (
-                  <div className="text-[10px] text-gray-300 border-t border-current/20 pt-1 mt-0.5">
-                    <span className="text-gray-500">Kaise dalen:</span> {c.application_method}
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}
-
-const HARDCODED_SCHEMES = [
-  { id: 'pm-kisan', name: 'PM-KISAN Samman Nidhi', desc: '₹6,000 annual direct cash transfer in 3 installments to all small/marginal landholding farmers.', state: 'all', link: 'https://pmkisan.gov.in/', tag: 'National' },
-  { id: 'pmfby', name: 'PM Fasal Bima Yojana', desc: 'Crop insurance against natural calamities, pests & diseases. Low premium: 2% Kharif, 1.5% Rabi crops.', state: 'all', link: 'https://pmfby.gov.in/', tag: 'National' },
-  { id: 'kcc', name: 'Kisan Credit Card (KCC)', desc: 'Short-term crop loans at subsidized 7% p.a. interest — up to ₹3 lakh for cultivation & inputs.', state: 'all', link: 'https://nabard.org', tag: 'National' },
-  { id: 'enam', name: 'eNAM — Online Mandi', desc: 'Sell directly on pan-India electronic market (1,389+ mandis). Better price discovery, no middlemen.', state: 'all', link: 'https://enam.gov.in/', tag: 'National' },
-  { id: 'mh-mahadbt', name: 'MahaDBT — Krishi Yantra Anudan', desc: '50% subsidy on farm machinery (tractors, sprayers, harvesters) via MahaDBT portal lottery system.', state: 'maharashtra', link: 'https://mahadbt.maharashtra.gov.in/', tag: 'Maharashtra' },
-  { id: 'mh-farm-pond', name: 'Magel Tyala Shet Tale (Farm Pond)', desc: 'Free farm pond construction for water storage — 100% state subsidy for small/marginal farmers.', state: 'maharashtra', link: 'https://mahadbt.maharashtra.gov.in/', tag: 'Maharashtra' },
-  { id: 'pb-parali', name: 'Punjab Parali Management Scheme', desc: '₹2,500/acre incentive for in-situ crop residue management — avoid stubble burning penalty.', state: 'punjab', link: 'https://agri.punjab.gov.in/', tag: 'Punjab' },
-  { id: 'pb-drip', name: 'Punjab Drip Irrigation Subsidy', desc: '80% subsidy on drip/sprinkler irrigation systems to reduce water consumption.', state: 'punjab', link: 'https://agri.punjab.gov.in/', tag: 'Punjab' },
-  { id: 'up-yantra', name: 'UP Krishi Yantra Anudan', desc: 'Direct subsidy on farm equipment purchase via UP Agriculture DBT portal.', state: 'uttar_pradesh', link: 'https://upagriculture.com/', tag: 'Uttar Pradesh' },
-  { id: 'up-solar', name: 'UP Kisan Uday Solar Pump Yojana', desc: 'Free solar pump (up to 5 HP) for small farmers to eliminate irrigation electricity costs.', state: 'uttar_pradesh', link: 'https://upagriculture.com/', tag: 'Uttar Pradesh' },
-  { id: 'rj-tarbandi', name: 'Rajasthan Tarbandi Yojana', desc: '50% subsidy (max ₹40,000) on farm fencing to protect crops from stray/wild animals.', state: 'rajasthan', link: 'https://rajkisan.rajasthan.gov.in/', tag: 'Rajasthan' },
-  { id: 'rj-processing', name: 'Rajasthan Krishi Processing Subsidy', desc: 'Subsidy on food processing equipment to add value to produce before selling at mandi.', state: 'rajasthan', link: 'https://rajkisan.rajasthan.gov.in/', tag: 'Rajasthan' },
-  { id: 'mp-bhavantar', name: 'MP Bhavantar Bhugtan Yojana', desc: 'Price support: if mandi price < MSP, state government pays the difference directly to your bank.', state: 'madhya_pradesh', link: 'http://mpkrishi.mp.gov.in/', tag: 'Madhya Pradesh' },
-  { id: 'mp-solar', name: 'MP Mukhyamantri Solar Pump Yojana', desc: '90% subsidy on solar pump installation (up to 5 HP) for year-round irrigation.', state: 'madhya_pradesh', link: 'http://mpkrishi.mp.gov.in/', tag: 'Madhya Pradesh' },
-  { id: 'ka-raitamitra', name: 'Karnataka Raitamitra Scheme', desc: 'Rainfed farming support — bund formation, farm pond, drip subsidy for dry-land farmers.', state: 'karnataka', link: 'https://raitamitra.kar.nic.in/', tag: 'Karnataka' },
-  { id: 'ka-bhoochetana', name: 'Karnataka Bhoochetana', desc: 'Soil health-based crop nutrient management to boost yields in rainfed areas.', state: 'karnataka', link: 'https://raitamitra.kar.nic.in/', tag: 'Karnataka' },
-  { id: 'gj-ikhedut', name: 'Gujarat iKhedut Portal Subsidies', desc: 'Single-window subsidies on seeds, fertilizers, irrigation equipment, solar pumps, and greenhouses.', state: 'gujarat', link: 'https://ikhedut.gujarat.gov.in/', tag: 'Gujarat' },
-  { id: 'hr-mera-pani', name: 'Haryana Mera Pani Meri Virasat', desc: '₹7,000/acre incentive for switching from paddy to water-saving crops (maize, cotton, bajra, etc.).', state: 'haryana', link: 'https://agriharyana.gov.in/', tag: 'Haryana' },
-  { id: 'hr-machinery', name: 'Haryana Farm Machinery Subsidy', desc: '50% subsidy on farm implements for individuals; 80% for FPOs/cooperative groups.', state: 'haryana', link: 'https://agriharyana.gov.in/', tag: 'Haryana' },
-]
-
-function extractState(location) {
-  const loc = location.toLowerCase()
-  const map = [
-    ['maharashtra','maharashtra'],['pune','maharashtra'],['mumbai','maharashtra'],['nagpur','maharashtra'],['nashik','maharashtra'],['aurangabad','maharashtra'],['solapur','maharashtra'],
-    ['punjab','punjab'],['ludhiana','punjab'],['amritsar','punjab'],['patiala','punjab'],['jalandhar','punjab'],
-    ['uttar pradesh','uttar_pradesh'],['lucknow','uttar_pradesh'],['kanpur','uttar_pradesh'],['agra','uttar_pradesh'],['varanasi','uttar_pradesh'],['meerut','uttar_pradesh'],
-    ['rajasthan','rajasthan'],['jaipur','rajasthan'],['jodhpur','rajasthan'],['udaipur','rajasthan'],['kota','rajasthan'],['bikaner','rajasthan'],
-    ['madhya pradesh','madhya_pradesh'],['bhopal','madhya_pradesh'],['indore','madhya_pradesh'],['gwalior','madhya_pradesh'],['jabalpur','madhya_pradesh'],
-    ['karnataka','karnataka'],['bangalore','karnataka'],['bengaluru','karnataka'],['mysore','karnataka'],['hubli','karnataka'],['dharwad','karnataka'],
-    ['gujarat','gujarat'],['ahmedabad','gujarat'],['surat','gujarat'],['vadodara','gujarat'],['rajkot','gujarat'],['anand','gujarat'],
-    ['haryana','haryana'],['gurgaon','haryana'],['faridabad','haryana'],['rohtak','haryana'],['ambala','haryana'],['hisar','haryana'],['karnal','haryana'],
-  ]
-  for (const [k, v] of map) if (loc.includes(k)) return v
-  return null
-}
-
-const IRRIGATION = ['Nalkoop (Borewell)', 'Nahar (Canal)', 'Barish par nirbhar (Rain-fed)', 'Talab / Pond', 'Drip System', 'Sprinkler']
-const CARD = 'bg-gray-800/60 rounded-xl border border-gray-700/40 p-4'
-const BTN_PRI = 'w-full bg-green-600 hover:bg-green-500 active:bg-green-700 text-white font-semibold py-2.5 px-4 rounded-xl transition-all duration-150 flex items-center justify-center gap-2 disabled:opacity-50'
-const INPUT = 'w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition'
-const SELECT = 'w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-green-500 transition'
-
-function calcCurrentWeek(sowingDate, totalWeeks) {
-  const days = Math.floor((Date.now() - new Date(sowingDate)) / 86400000)
-  return Math.max(1, Math.min(Math.ceil(days / 7) || 1, totalWeeks))
-}
-
-// ── Week Card Component ───────────────────────────────────────────────────────
-function WeekCard({ week, curWeek, completedTasks, onToggleTask }) {
-  const [expanded, setExpanded] = useState(week.week === curWeek)
-  const wx = week.expected_weather || {}
-  const isPast = week.week < curWeek
-  const isCurrent = week.week === curWeek
-  const isFuture = week.week > curWeek
-
-  const weekDone = week.tasks?.filter(t => completedTasks.includes(t.task_id)).length || 0
-  const weekTotal = week.tasks?.length || 0
-  const weekPct = weekTotal > 0 ? Math.round((weekDone / weekTotal) * 100) : 0
-
-  return (
-    <div className={`rounded-xl border transition-all duration-200 overflow-hidden ${
-      isCurrent
-        ? 'border-green-500/50 bg-green-900/10'
-        : isPast
-        ? 'border-gray-700/30 bg-gray-800/30 opacity-80'
-        : 'border-gray-700/40 bg-gray-800/50'
-    }`}>
-      {/* Header — always visible */}
-      <button className="w-full text-left px-4 py-3" onClick={() => setExpanded(e => !e)}>
-        <div className="flex items-center gap-2">
-          {isCurrent && <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse flex-shrink-0" />}
-          {isPast && <span className="text-green-400 text-sm flex-shrink-0">✓</span>}
-          {isFuture && <span className="text-gray-500 text-sm flex-shrink-0">○</span>}
-
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className={`font-semibold text-sm ${isCurrent ? 'text-white' : isPast ? 'text-gray-300' : 'text-gray-400'}`}>
-                Week {week.week}
-              </span>
-              <span className="text-xs text-gray-500">{week.stage}</span>
-              {week.critical_window && (
-                <span className="text-[10px] bg-red-500/20 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded font-semibold">
-                  CRITICAL
-                </span>
-              )}
-              {week.plan_change_reason && (
-                <span className="text-[10px] bg-amber-500/20 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded">
-                  UPDATED
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-3 mt-0.5 flex-wrap">
-              {week.date_range && <span className="text-[10px] text-gray-500">{week.date_range}</span>}
-              <span className="text-[10px] text-gray-500">{week.days_range}</span>
-              <span className="text-[10px]">{WEATHER_ICON(wx)} {wx.temp_range || ''}</span>
-              {(wx.rain_mm_week || 0) > 0 && (
-                <span className="text-[10px] text-blue-400">💧{wx.rain_mm_week}mm</span>
-              )}
-              {week.week_cost_estimate && (
-                <span className="text-[10px] text-amber-400">{week.week_cost_estimate}</span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="text-xs text-gray-400">{weekDone}/{weekTotal}</span>
-            <svg className={`w-4 h-4 text-gray-500 transition-transform ${expanded ? 'rotate-180' : ''}`}
-              fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </div>
-        </div>
-
-        {/* Progress bar */}
-        <div className="mt-2 w-full bg-gray-700/50 rounded-full h-1">
-          <div className={`h-1 rounded-full transition-all ${weekPct === 100 ? 'bg-green-500' : isCurrent ? 'bg-amber-500' : 'bg-gray-600'}`}
-            style={{ width: `${weekPct}%` }} />
-        </div>
-      </button>
-
-      {/* Expanded details */}
-      {expanded && (
-        <div className="border-t border-gray-700/40 px-4 pb-4 pt-3 space-y-3">
-          {/* Weather block */}
-          {wx.conditions && (
-            <div className={`rounded-lg p-3 space-y-1 ${
-              wx.frost_risk ? 'bg-blue-900/20 border border-blue-500/20'
-              : wx.heat_stress ? 'bg-red-900/20 border border-red-500/20'
-              : (wx.rain_mm_week || 0) > 20 ? 'bg-blue-900/20 border border-blue-500/20'
-              : 'bg-gray-700/30 border border-gray-600/30'
-            }`}>
-              <div className="flex items-center gap-2">
-                <span className="text-lg">{WEATHER_ICON(wx)}</span>
-                <div>
-                  <div className="text-xs font-semibold text-gray-200">{wx.conditions}</div>
-                  <div className="text-[10px] text-gray-400">
-                    {wx.temp_range} · Humidity {wx.humidity_pct}% · Rain {wx.rain_mm_week || 0}mm
-                    {wx.frost_risk && ' · 🥶 Frost risk'}
-                    {wx.heat_stress && ' · 🌡️ Heat stress'}
-                  </div>
-                </div>
-              </div>
-              {week.weather_advisory && (
-                <div className="text-xs text-amber-300 flex items-start gap-1">
-                  <span>⚠️</span><span>{week.weather_advisory}</span>
-                </div>
-              )}
-              {week.plan_change_reason && (
-                <div className="text-xs text-blue-300 flex items-start gap-1">
-                  <span>🔄</span><span>{week.plan_change_reason}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Tasks */}
-          <div className="space-y-2">
-            {week.tasks?.map(task => {
-              const done = completedTasks.includes(task.task_id)
-              return (
-                <div key={task.task_id}
-                  onClick={() => onToggleTask && onToggleTask(task.task_id)}
-                  className={`rounded-lg border p-3 cursor-pointer transition-all ${
-                    done
-                      ? 'bg-green-900/15 border-green-800/30 opacity-70'
-                      : 'bg-gray-700/30 border-gray-600/30 hover:border-gray-500/50'
-                  }`}>
-                  <div className="flex items-start gap-2.5">
-                    <div className={`mt-0.5 w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition ${
-                      done ? 'bg-green-600 border-green-600' : 'border-gray-500'
-                    }`}>
-                      {done && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                      </svg>}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-sm">{TASK_ICON[task.category] || '📌'}</span>
-                        <span className="text-sm font-medium text-white">{task.title}</span>
-                        {task.critical && <span className="text-[9px] bg-red-500/20 text-red-400 px-1 py-0.5 rounded">Critical</span>}
-                        {task.photo_needed && <span className="text-[9px] bg-purple-500/20 text-purple-400 px-1 py-0.5 rounded">📸 Photo</span>}
-                      </div>
-                      <p className="text-xs text-gray-400 mt-0.5">{task.desc}</p>
-                      {task.weather_condition && (
-                        <p className="text-[10px] text-amber-400 mt-1">⚠️ {task.weather_condition}</p>
-                      )}
-                      {(task.water_liters_per_acre > 0 || task.inputs?.length > 0) && (
-                        <div className="mt-1.5 flex flex-wrap gap-1">
-                          {task.water_liters_per_acre > 0 && (
-                            <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded">
-                              💧{task.water_liters_per_acre.toLocaleString()}L/acre
-                            </span>
-                          )}
-                          {task.inputs?.map(inp => (
-                            <span key={inp.name} className="text-[10px] bg-gray-700/60 text-gray-300 border border-gray-600/30 px-1.5 py-0.5 rounded">
-                              {inp.name} {inp.quantity}{inp.cost_approx ? ` (${inp.cost_approx})` : ''}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <ChemicalDetail chemicals={task.chemicals} />
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Question Form ─────────────────────────────────────────────────────────────
-function QuestionForm({ questions, answers, setAnswers, round = 1 }) {
-  return (
-    <div className="space-y-3">
-      {questions.map((q, i) => (
-        <div key={q.id} className={CARD + ' space-y-2'}>
-          <label className="text-sm font-medium text-white flex items-start gap-2">
-            <span className="text-green-400 font-bold flex-shrink-0">
-              {round === 2 ? `+${i + 1}` : `${i + 1}.`}
-            </span>
-            <span>{q.question}</span>
-          </label>
-          {q.why_asking && (
-            <p className="text-[10px] text-blue-400 ml-5">💡 {q.why_asking}</p>
-          )}
-          {answers[q.id] && q.detected_from_photo && answers[q.id] === q.detected_from_photo && (
-            <div className="ml-5 text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-1 rounded">
-              📷 Photo se detect hua — confirm karo
-            </div>
-          )}
-          {q.type === 'choice' && (
-            <div className="grid grid-cols-2 gap-1.5 ml-5">
-              {q.options?.map(opt => (
-                <button key={opt} onClick={() => setAnswers(a => ({ ...a, [q.id]: opt }))}
-                  className={`text-xs py-2 px-2 rounded-lg border text-left transition ${
-                    answers[q.id] === opt
-                      ? 'bg-green-600/20 border-green-500/60 text-green-300'
-                      : 'bg-gray-700/40 border-gray-600/40 text-gray-300 hover:border-gray-500'
-                  }`}>
-                  {opt}
+                <button
+                  type="button"
+                  onClick={removePhoto}
+                  className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-red-500 transition-colors text-sm"
+                >
+                  ✕
                 </button>
-              ))}
-            </div>
-          )}
-          {q.type === 'yes_no' && (
-            <div className="flex gap-2 ml-5">
-              {['Haan', 'Nahi'].map(opt => (
-                <button key={opt} onClick={() => setAnswers(a => ({ ...a, [q.id]: opt }))}
-                  className={`flex-1 text-sm py-2 rounded-lg border transition ${
-                    answers[q.id] === opt
-                      ? opt === 'Haan' ? 'bg-green-600/20 border-green-500 text-green-300' : 'bg-red-600/20 border-red-500 text-red-300'
-                      : 'bg-gray-700/40 border-gray-600/40 text-gray-300 hover:border-gray-500'
-                  }`}>
-                  {opt === 'Haan' ? '✓ Haan' : '✗ Nahi'}
-                </button>
-              ))}
-            </div>
-          )}
-          {q.type === 'number' && (
-            <div className="flex items-center gap-2 ml-5">
-              <input type="number" min={q.min || 0} max={q.max || 9999} step="0.1"
-                className={INPUT} placeholder={`Enter in ${q.unit || ''}`}
-                value={answers[q.id] || ''}
-                onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} />
-              {q.unit && <span className="text-gray-400 text-sm whitespace-nowrap">{q.unit}</span>}
-            </div>
-          )}
-          {q.type === 'text' && (
-            <input className={INPUT + ' ml-5'} placeholder="Jawab likhe..."
-              value={answers[q.id] || ''}
-              onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))} />
-          )}
-        </div>
-      ))}
-    </div>
-  )
-}
+              </div>
+            )}
 
-// ── Main Component ────────────────────────────────────────────────────────────
-export default function CropJourney() {
-  const navigate = useNavigate()
-  // mode: intro|questions|followup|recommendation|starting|dashboard|report
-  const [mode, setMode] = useState('intro')
-  const [location, setLocation] = useState('')
-  const [month, setMonth] = useState(new Date().getMonth() + 1)
-  const [showMonthEdit, setShowMonthEdit] = useState(false)
-  const [landB64, setLandB64] = useState(null)
-  const [questions, setQuestions] = useState([])
-  const [followupQuestions, setFollowupQuestions] = useState([])
-  const [answers, setAnswers] = useState({})
-  const [followupAnswers, setFollowupAnswers] = useState({})
-  const [rec, setRec] = useState(null)
-  const [weather, setWeather] = useState(null)
-  const [selCrop, setSelCrop] = useState('')
-  const [sowDate, setSowDate] = useState('')
-  const [landSize, setLandSize] = useState('')
-  const [irrigation, setIrrigation] = useState('Nalkoop (Borewell)')
-  const [journey, setJourney] = useState(null)
-  const [activeTab, setActiveTab] = useState('tasks')
-  const [subsidies, setSubsidies] = useState([])
-  const [subLoading, setSubLoading] = useState(false)
-  const [wxData, setWxData] = useState(null)
-  const [photoModal, setPhotoModal] = useState(false)
-  const [photoResult, setPhotoResult] = useState(null)
-  const [photoWeek, setPhotoWeek] = useState(1)
-  const [photoStage, setPhotoStage] = useState('')
-  const [completeModal, setCompleteModal] = useState(false)
-  const [sellPrice, setSellPrice] = useState('')
-  const [qtySold, setQtySold] = useState('')
-  const [updatingPlan, setUpdatingPlan] = useState(false)
-  const [planUpdated, setPlanUpdated] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [err, setErr] = useState('')
-
-  const landRef = useRef(null)
-  const cropPhotoRef = useRef(null)
-
-  useEffect(() => {
-    const id = localStorage.getItem('kd_journey_id')
-    if (id) loadJourney(id)
-  }, [])
-
-  async function loadJourney(id) {
-    try {
-      const r = await axios.get(`${API}/crop-journey/${id}`)
-      setJourney(r.data)
-      setLocation(r.data.location)
-      setMode(r.data.status === 'completed' ? 'report' : 'dashboard')
-    } catch {
-      localStorage.removeItem('kd_journey_id')
-    }
-  }
-
-  function handleLandPhoto(e) {
-    const f = e.target.files[0]
-    if (!f) return
-    const reader = new FileReader()
-    reader.onload = ev => setLandB64(ev.target.result.split(',')[1])
-    reader.readAsDataURL(f)
-  }
-
-  // ── Onboarding Step 1: fetch weather + questions ──────────────────────────
-  async function fetchQuestions() {
-    if (!location.trim()) { setErr('Location daale (e.g. Pune, Maharashtra)'); return }
-    setLoading(true); setErr('')
-    try {
-      const r = await axios.post(`${API}/crop-journey/questions`, { location, month, land_photo_b64: landB64 })
-      const qs = r.data.questions
-      setQuestions(qs)
-      if (r.data.weather) setWeather(r.data.weather)
-      // Auto-fill answers detected from photo
-      const pre = {}
-      qs.forEach(q => { if (q.detected_from_photo) pre[q.id] = q.detected_from_photo })
-      if (Object.keys(pre).length) setAnswers(pre)
-      setMode('questions')
-    } catch { setErr('Questions load nahi hue. Try again.') }
-    finally { setLoading(false) }
-  }
-
-  // ── Onboarding Step 2: submit Round 1, check for follow-up ───────────────
-  async function submitAnswers() {
-    const unanswered = questions.filter(q => !answers[q.id] && answers[q.id] !== 0)
-    if (unanswered.length) { setErr(`${unanswered.length} sawaalon ka jawab de`); return }
-    setLoading(true); setErr('')
-    try {
-      const r = await axios.post(`${API}/crop-journey/followup-questions`, {
-        location, month, initial_answers: answers
-      })
-      if (r.data.has_followup && r.data.questions?.length > 0) {
-        setFollowupQuestions(r.data.questions)
-        setMode('followup')
-      } else {
-        await runAnalysis(answers)
-      }
-    } catch {
-      // If followup endpoint fails, proceed directly
-      await runAnalysis(answers)
-    } finally { setLoading(false) }
-  }
-
-  // ── Onboarding Step 3 (optional): submit follow-up answers ───────────────
-  async function submitFollowup() {
-    const unanswered = followupQuestions.filter(q => !followupAnswers[q.id])
-    if (unanswered.length) { setErr(`${unanswered.length} sawaalon ka jawab de`); return }
-    setLoading(true); setErr('')
-    const allAnswers = { ...answers, ...followupAnswers }
-    await runAnalysis(allAnswers)
-    setLoading(false)
-  }
-
-  async function runAnalysis(allAnswers) {
-    try {
-      const r = await axios.post(`${API}/crop-journey/analyze`, {
-        location, month, answers: allAnswers, land_photo_b64: landB64
-      })
-      setRec(r.data.recommendation)
-      if (r.data.weather) setWeather(r.data.weather)
-      setAnswers(allAnswers)
-      setSelCrop(r.data.recommendation.recommended_crop)
-      setMode('recommendation')
-    } catch { setErr('Analysis fail hua. Try again.') }
-  }
-
-  // ── Start Journey ─────────────────────────────────────────────────────────
-  async function startJourney() {
-    if (!sowDate) { setErr('Beejai ki tarikh daale'); return }
-    if (!landSize || isNaN(parseFloat(landSize))) { setErr('Zameen ka size daale'); return }
-    setMode('starting'); setErr('')
-    try {
-      const r = await axios.post(`${API}/crop-journey/start`, {
-        location, crop_type: selCrop, sowing_date: sowDate,
-        land_size_acres: parseFloat(landSize), irrigation_type: irrigation,
-        answers, farmer_id: 'farmer_1',
-      }, { timeout: 90000 })
-      localStorage.setItem('kd_journey_id', r.data.journey_id)
-      await loadJourney(r.data.journey_id)
-    } catch { setErr('Journey shuru nahi ho saki. Try again.'); setMode('recommendation') }
-  }
-
-  // ── Dashboard actions ─────────────────────────────────────────────────────
-  async function toggleTask(taskId) {
-    if (!journey) return
-    const done = journey.completed_tasks.includes(taskId)
-    try {
-      const r = await axios.post(`${API}/crop-journey/${journey.journey_id}/task`, { task_id: taskId, completed: !done })
-      setJourney(prev => ({
-        ...prev,
-        completed_tasks: !done ? [...prev.completed_tasks, taskId] : prev.completed_tasks.filter(id => id !== taskId),
-        tasks_completed: r.data.tasks_completed,
-      }))
-    } catch {}
-  }
-
-  async function updatePlan(trigger = 'manual') {
-    if (!journey) return
-    setUpdatingPlan(true); setPlanUpdated(null); setErr('')
-    try {
-      const curWeek = calcCurrentWeek(journey.sowing_date, journey.total_weeks)
-      const r = await axios.post(`${API}/crop-journey/${journey.journey_id}/update-plan`, {
-        current_week: curWeek, trigger,
-      }, { timeout: 60000 })
-      if (r.data.updated) {
-        setJourney(prev => ({
-          ...prev,
-          task_calendar: r.data.task_calendar,
-          tasks_total: r.data.tasks_total,
-          plan_updates_count: (prev.plan_updates_count || 0) + 1,
-        }))
-        setPlanUpdated(r.data.weeks_updated)
-      } else {
-        setPlanUpdated(0)
-      }
-    } catch { setErr('Plan update fail hua') }
-    finally { setUpdatingPlan(false) }
-  }
-
-  async function loadSubsidies() {
-    if (subsidies.length > 0 || !journey) return
-    setSubLoading(true)
-    try {
-      const r = await axios.get(`${API}/crop-journey/${journey.journey_id}/subsidies`)
-      setSubsidies(r.data.alerts)
-    } catch {}
-    finally { setSubLoading(false) }
-  }
-
-  async function loadWeather() {
-    if (wxData || !journey) return
-    try {
-      const r = await axios.get(`${API}/crop-journey/${journey.journey_id}/weather`)
-      setWxData(r.data)
-    } catch {}
-  }
-
-  useEffect(() => {
-    if (activeTab === 'subsidies') loadSubsidies()
-    if (activeTab === 'weather') loadWeather()
-  }, [activeTab])
-
-  function handleCropPhoto(e) {
-    const f = e.target.files[0]
-    if (!f || !journey) return
-    setLoading(true)
-    const reader = new FileReader()
-    reader.onload = async ev => {
-      const b64 = ev.target.result.split(',')[1]
-      try {
-        const r = await axios.post(`${API}/crop-journey/${journey.journey_id}/photo-check`, {
-          photo_b64: b64, week: photoWeek, stage: photoStage,
-        })
-        setPhotoResult(r.data)
-        setPhotoModal(true)
-        // If AI says plan update needed, trigger it automatically
-        if (r.data.plan_update_needed) {
-          const curWeek = calcCurrentWeek(journey.sowing_date, journey.total_weeks)
-          await axios.post(`${API}/crop-journey/${journey.journey_id}/update-plan`, {
-            current_week: curWeek, trigger: 'photo_check',
-          }, { timeout: 60000 }).then(resp => {
-            if (resp.data.updated) {
-              setJourney(prev => ({
-                ...prev,
-                task_calendar: resp.data.task_calendar,
-                tasks_total: resp.data.tasks_total,
-              }))
-            }
-          }).catch(() => {})
-        }
-      } catch { setErr('Photo analysis fail hua') }
-      finally { setLoading(false) }
-    }
-    reader.readAsDataURL(f)
-  }
-
-  async function completeJourney() {
-    if (!sellPrice) { setErr('Selling price daale'); return }
-    setLoading(true)
-    try {
-      const r = await axios.post(`${API}/crop-journey/${journey.journey_id}/complete`, {
-        selling_price_per_kg: parseFloat(sellPrice),
-        quantity_sold_kg: qtySold ? parseFloat(qtySold) : null,
-        final_grade: journey.final_grade || 'B',
-      })
-      setJourney(prev => ({ ...prev, status: 'completed', report: r.data.report, selling_price_per_kg: parseFloat(sellPrice) }))
-      setCompleteModal(false)
-      setMode('report')
-    } catch { setErr('Complete nahi ho saka') }
-    finally { setLoading(false) }
-  }
-
-  function downloadReport() {
-    if (!journey?.report) return
-    const rpt = journey.report
-    const doc = new jsPDF()
-    doc.setFillColor(22, 101, 52); doc.rect(0, 0, 210, 28, 'F')
-    doc.setTextColor(255, 255, 255); doc.setFontSize(16)
-    doc.text('KrishiDoot.AI — Farming Journey Report', 14, 16)
-    doc.setTextColor(0, 0, 0); doc.setFontSize(11)
-    let y = 36
-    const line = (t) => { doc.text(t, 14, y); y += 7 }
-    line(`Fasal: ${journey.crop_type} | Jagah: ${journey.location}`)
-    line(`Beejai: ${journey.sowing_date} | Zameen: ${journey.land_size_acres} acres`)
-    line(`Tasks: ${journey.tasks_completed}/${journey.tasks_total} | Plan updates: ${journey.plan_updates_count || 0}`)
-    y += 4
-    doc.setFontSize(13); line('Financial Summary'); doc.setFontSize(11)
-    line(`Total Kharcha: ${rpt.total_cost_estimate}`)
-    line(`Net Profit: ${rpt.net_profit_estimate} (ROI: ${rpt.roi_percent || '?'}%)`)
-    line(`Paidawar: ${rpt.yield_achieved}`)
-    if (journey.selling_price_per_kg) line(`Bikri Bhav: ₹${journey.selling_price_per_kg}/kg`)
-    if (journey.total_income) line(`Kul Aay: ₹${journey.total_income}`)
-    if (rpt.weather_impact) { y += 4; doc.setFontSize(13); line('Weather Impact'); doc.setFontSize(11); line(rpt.weather_impact) }
-    y += 4; doc.setFontSize(13); line('Highlights'); doc.setFontSize(11)
-    rpt.highlights?.forEach(h => line(`• ${h}`))
-    y += 4; doc.setFontSize(13); line('Seekhe Hue Sabak'); doc.setFontSize(11)
-    rpt.lessons?.forEach(l => line(`• ${l}`))
-    y += 4; line(`Agla Sezon: ${rpt.next_season_tip}`)
-    const dt = new Date().toISOString().slice(0, 10).replace(/-/g, '')
-    doc.save(`KrishiDoot-Journey-${journey.crop_type}-${dt}.pdf`)
-  }
-
-  function resetJourney() {
-    localStorage.removeItem('kd_journey_id')
-    setJourney(null); setMode('intro'); setRec(null); setWeather(null)
-    setQuestions([]); setFollowupQuestions([]); setAnswers({}); setFollowupAnswers({})
-    setSubsidies([]); setWxData(null); setPhotoResult(null); setPlanUpdated(null); setErr('')
-  }
-
-  // ─────────────────────────── RENDER ──────────────────────────────────────
-
-  // ── INTRO ─────────────────────────────────────────────────────────────────
-  if (mode === 'intro') return (
-    <div className="py-6 space-y-5">
-      <div className="text-center space-y-2">
-        <div className="text-5xl">🌾</div>
-        <h1 className="text-2xl font-bold text-white">Fasal Journey</h1>
-        <p className="text-gray-400 text-sm">Beejai se bikri tak — AI ke saath poori kheti</p>
-      </div>
-
-      <div className={CARD + ' space-y-4'}>
-        <div>
-          <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Aapka Gaon / Sheher</label>
-          <input className={INPUT} placeholder="e.g. Pune, Maharashtra" value={location}
-            onChange={e => setLocation(e.target.value)} onKeyDown={e => e.key === 'Enter' && fetchQuestions()} />
-        </div>
-        <div>
-          <div className="flex items-center justify-between mb-1.5">
-            <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Abhi Kaunsa Mahina Hai?</label>
-            <button onClick={() => setShowMonthEdit(e => !e)} className="text-xs text-green-400 hover:text-green-300">
-              {showMonthEdit ? 'Done' : 'Badlo'}
+            <button type="submit" className="w-full kd-btn-primary text-white font-bold py-3.5 rounded-xl">
+              {landPhoto ? '🔬 Analyze Photo & Start' : 'Start Assessment'}
             </button>
-          </div>
-          {showMonthEdit
-            ? <select className={SELECT} value={month} onChange={e => setMonth(Number(e.target.value))}>
-                {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-              </select>
-            : <div className="bg-gray-700/40 border border-gray-600/40 rounded-lg px-3 py-2.5 text-sm text-white">
-                {MONTHS[month - 1]}
-              </div>
-          }
+          </form>
         </div>
-        <div>
-          <label className="block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide">Zameen Ki Photo (Optional)</label>
-          <input ref={landRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleLandPhoto} />
-          <button onClick={() => landRef.current?.click()}
-            className="w-full border-2 border-dashed border-gray-600 hover:border-green-500 rounded-xl py-4 text-center transition">
-            {landB64
-              ? <span className="text-green-400 text-sm font-medium">✓ Photo ready — AI mitti + conditions analyse karega</span>
-              : <span className="text-gray-500 text-sm">📸 Zameen ki photo (AI questions aur behtar baneyega)</span>}
+      )}
+
+      {/* STEP: LOADING */}
+      {step === 'loading' && (
+        <div className="flex-1 flex flex-col items-center justify-center py-20">
+          <div className="relative w-20 h-20 mb-6">
+            <div className="absolute inset-0 rounded-full border-4 border-green-500/20" />
+            <div className="absolute inset-0 rounded-full border-4 border-green-500 border-t-transparent animate-spin" />
+            <div className="absolute inset-0 flex items-center justify-center text-2xl animate-pulse">🌱</div>
+          </div>
+          <p className="font-bold text-sm text-center animate-pulse font-display" style={{ color: 'var(--text-primary)' }}>{loadingMsg}</p>
+        </div>
+      )}
+
+      {/* STEP: QUESTIONS */}
+      {step === 'questions' && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-8 h-8 rounded-full bg-green-500/10 text-green-500 flex items-center justify-center font-bold">1</div>
+            <div>
+              <h3 className="font-bold font-display" style={{ color: 'var(--text-primary)' }}>Farm Profiling</h3>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>Help the AI understand your constraints</p>
+            </div>
+          </div>
+          
+          <div className="space-y-4">
+            {questions.map((q, idx) => (
+              <div key={q.id} className={`${KD_CARD} p-5 hover:-translate-y-0.5 transition-transform ${q.detected_from_photo ? 'border-green-500/40' : ''}`}>
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <p className="font-bold text-sm" style={{ color: 'var(--text-primary)' }}>{idx + 1}. {q.text || q.question}</p>
+                  {q.detected_from_photo && (
+                    <span className="flex-shrink-0 text-[9px] font-bold bg-green-500/15 text-green-500 px-2 py-0.5 rounded-full flex items-center gap-1 whitespace-nowrap">
+                      📷 Auto-detected
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-col gap-2">
+                  {q.type === 'number' ? (
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min={q.min || 0}
+                        max={q.max || 1000}
+                        step="0.1"
+                        placeholder={`Enter ${q.unit || 'value'}`}
+                        value={answers[q.id] || ''}
+                        onChange={(e) => setAnswers({...answers, [q.id]: e.target.value})}
+                        className={`${INPUT_CLS}`}
+                      />
+                      {q.unit && (
+                        <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold" style={{ color: 'var(--text-muted)' }}>{q.unit}</span>
+                      )}
+                    </div>
+                  ) : (q.options || []).map(opt => (
+                    <label key={opt} className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all ${answers[q.id] === opt ? 'border-green-500 bg-green-500/5' : 'border-[var(--border-card)] hover:border-green-500/30'}`}>
+                      <input
+                        type="radio"
+                        name={q.id}
+                        value={opt}
+                        checked={answers[q.id] === opt}
+                        onChange={(e) => setAnswers({...answers, [q.id]: e.target.value})}
+                        className="text-green-500 focus:ring-green-500 accent-green-500"
+                      />
+                      <span className="text-sm font-medium" style={{ color: answers[q.id] === opt ? 'var(--text-primary)' : 'var(--text-secondary)' }}>{opt}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          
+          <button onClick={handleSubmitAnswers} className="w-full kd-btn-primary text-white font-bold py-3.5 rounded-xl sticky bottom-24 shadow-2xl z-10">
+            Get Recommendation
           </button>
         </div>
-      </div>
-
-      {weather?.current && (
-        <div className={CARD + ' flex items-center gap-3'}>
-          <span className="text-2xl">🌤️</span>
-          <div>
-            <div className="text-white font-medium text-sm">{weather.current.temp_c}°C · {weather.current.desc}</div>
-            <div className="text-gray-400 text-xs">{location} · Nami {weather.current.humidity}%</div>
-          </div>
-          {weather.advisory && <div className="ml-auto text-[10px] text-amber-400 text-right max-w-32">{weather.advisory}</div>}
-        </div>
       )}
 
-      <ErrorAlert error={err} />
-      <button className={BTN_PRI} onClick={fetchQuestions} disabled={loading}>
-        {loading ? <><SpinnerIcon /> Mausam + questions la rahe hain...</> : 'Shuru Karo →'}
-      </button>
-
-      <div className="grid grid-cols-4 gap-2 pt-2">
-        {[['🌤️','Mausam'], ['🏛️','Subsidies'], ['📅','Timeline'], ['📄','Report']].map(([icon, label]) => (
-          <div key={label} className="bg-gray-800/40 rounded-xl p-2.5 text-center border border-gray-700/30">
-            <div className="text-xl mb-1">{icon}</div>
-            <div className="text-[10px] text-gray-400">{label}</div>
+      {/* STEP: RESULT */}
+      {step === 'result' && recommendation && (
+        <div className="space-y-6">
+          <div className="text-center py-6 relative">
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 bg-green-500 blur-[80px] opacity-20 pointer-events-none" />
+            <p className="text-xs font-black text-green-500 uppercase tracking-widest mb-4 font-display">AI Recommendation</p>
+            
+            <div className="flex justify-center mb-6">
+              <ProgressRing pct={recommendation.confidence * 100} size={120} stroke={8} label={`${recommendation.confidence * 100}% Match`} />
+            </div>
+            
+            <h2 className="text-4xl font-black font-display tracking-tight capitalize" style={{ color: 'var(--text-primary)' }}>{recommendation.crop}</h2>
+            <p className="text-sm mt-3 mx-auto max-w-sm" style={{ color: 'var(--text-secondary)' }}>
+              Based on {location}'s climate and your farm profile, this offers the highest risk-adjusted return.
+            </p>
           </div>
-        ))}
-      </div>
-    </div>
-  )
 
-  // ── QUESTIONS (Round 1) ───────────────────────────────────────────────────
-  if (mode === 'questions') return (
-    <div className="py-6 space-y-4">
-      <div className="flex items-center gap-3">
-        <button onClick={() => setMode('intro')} className="text-gray-400 hover:text-white transition">←</button>
-        <div>
-          <h2 className="text-lg font-bold text-white">Round 1 — Khet Ki Jaankari</h2>
-          <p className="text-gray-500 text-xs">{location} · {MONTHS[month - 1]} · {weather?.current ? `${weather.current.temp_c}°C, ${weather.current.desc}` : ''}</p>
-        </div>
-      </div>
-
-      {weather?.advisory && (
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2.5 text-xs text-amber-300 flex items-start gap-2">
-          <span>🌤️</span><span>{weather.advisory}</span>
-        </div>
-      )}
-
-      <QuestionForm questions={questions} answers={answers} setAnswers={setAnswers} round={1} />
-      <ErrorAlert error={err} />
-      <button className={BTN_PRI} onClick={submitAnswers} disabled={loading}>
-        {loading ? <><SpinnerIcon /> AI Follow-up Check Kar Raha Hai...</> : 'Aage Bado →'}
-      </button>
-    </div>
-  )
-
-  // ── FOLLOW-UP QUESTIONS (Round 2) ─────────────────────────────────────────
-  if (mode === 'followup') return (
-    <div className="py-6 space-y-4">
-      <div className="flex items-center gap-3">
-        <button onClick={() => setMode('questions')} className="text-gray-400 hover:text-white transition">←</button>
-        <div>
-          <h2 className="text-lg font-bold text-white">Round 2 — Thode Aur Sawaal</h2>
-          <p className="text-gray-500 text-xs">AI ko kuch aur jaankari chahiye</p>
-        </div>
-      </div>
-      <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 text-xs text-blue-300">
-        💡 Aapke jawaabon aur mausam ke hisaab se AI ko yeh specific jaankari chahiye planning ke liye
-      </div>
-      <QuestionForm questions={followupQuestions} answers={followupAnswers} setAnswers={setFollowupAnswers} round={2} />
-      <ErrorAlert error={err} />
-      <button className={BTN_PRI} onClick={submitFollowup} disabled={loading}>
-        {loading ? <><SpinnerIcon /> Analysis Ho Raha Hai...</> : 'Submit Karo →'}
-      </button>
-      <button onClick={() => runAnalysis(answers).then(() => setLoading(false))} className="w-full text-center text-gray-500 text-xs py-1 hover:text-gray-300 transition">
-        Skip karo — recommendation dekho
-      </button>
-    </div>
-  )
-
-  // ── RECOMMENDATION ────────────────────────────────────────────────────────
-  if (mode === 'recommendation') return (
-    <div className="py-6 space-y-4">
-      <div className="flex items-center gap-3">
-        <button onClick={() => setMode(followupQuestions.length ? 'followup' : 'questions')} className="text-gray-400 hover:text-white transition">←</button>
-        <div><h2 className="text-lg font-bold text-white">AI Salah</h2><p className="text-gray-500 text-xs">{location}</p></div>
-      </div>
-
-      {rec && (
-        <>
-          <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-3xl">{cropEmoji(rec.recommended_crop)}</span>
+          <div className="grid grid-cols-2 gap-4">
+            <div className={`${KD_CARD} p-4 flex items-center gap-3`}>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-blue-500/10 text-blue-500 text-xl">💧</div>
               <div>
-                <div className="text-white font-bold text-lg capitalize">{rec.recommended_crop}</div>
-                <div className="text-green-400 text-xs">Confidence: {rec.confidence}%</div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-blue-500">Water Needs</p>
+                <p className="text-sm font-bold mt-0.5" style={{ color: 'var(--text-primary)' }}>{recommendation.metrics.water}</p>
               </div>
             </div>
-            <p className="text-gray-300 text-sm">{rec.why_this_crop}</p>
-            {rec.weather_fit && (
-              <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-2 text-xs text-blue-300 flex items-start gap-1.5">
-                <span>🌤️</span><span>{rec.weather_fit}</span>
+            <div className={`${KD_CARD} p-4 flex items-center gap-3`}>
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-amber-500/10 text-amber-500 text-xl">⏱️</div>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-amber-500">Duration</p>
+                <p className="text-sm font-bold mt-0.5" style={{ color: 'var(--text-primary)' }}>{recommendation.metrics.duration}</p>
               </div>
-            )}
-            <div className="grid grid-cols-2 gap-2">
-              {[['Expected Yield', rec.expected_yield_per_acre, 'text-blue-400'],
-                ['Expected Income', rec.expected_income_per_acre, 'text-green-400']].map(([l, v, c]) => (
-                <div key={l} className="bg-gray-800/50 rounded-lg p-2">
-                  <div className="text-xs text-gray-400">{l}</div>
-                  <div className={`font-semibold text-sm ${c}`}>{v}</div>
-                </div>
+            </div>
+          </div>
+
+          <div className={`${KD_CARD} p-5`}>
+            <p className="text-xs font-bold uppercase tracking-widest mb-3 font-display text-green-500">Why this crop?</p>
+            <ul className="space-y-3">
+              {recommendation.reasons.map((r, i) => (
+                <li key={i} className="flex gap-2.5 text-sm">
+                  <span className="text-green-500 mt-0.5">✓</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>{r}</span>
+                </li>
               ))}
-            </div>
-            {rec.best_sowing_window && <div className="text-xs text-amber-400">⏰ Best Sowing: {rec.best_sowing_window}</div>}
+            </ul>
           </div>
 
-          {rec.weather_warnings?.length > 0 && (
-            <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 space-y-1">
-              <div className="text-xs font-semibold text-amber-400">⚠️ Mausam Chetavani</div>
-              {rec.weather_warnings.map(w => <div key={w} className="text-gray-300 text-xs">• {w}</div>)}
-            </div>
-          )}
-
-          {rec.alternative_crops?.length > 0 && (
-            <div className={CARD}>
-              <div className="text-xs text-gray-400 mb-2 uppercase tracking-wide">Doosre Vikalp</div>
-              <div className="flex gap-2 flex-wrap">
-                {[rec.recommended_crop, ...rec.alternative_crops].map(c => (
-                  <button key={c} onClick={() => setSelCrop(c)}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm border transition ${
-                      selCrop === c ? 'bg-green-600/20 border-green-500 text-green-300' : 'bg-gray-700/40 border-gray-600 text-gray-300 hover:border-gray-500'
-                    }`}>
-                    {cropEmoji(c)} <span className="capitalize">{c}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {rec.key_risks?.length > 0 && (
-            <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 space-y-1">
-              <div className="text-xs font-semibold text-red-400">⚠️ Khatre</div>
-              {rec.key_risks.map(r => <div key={r} className="text-gray-300 text-xs">• {r}</div>)}
-            </div>
-          )}
-
-          <div className={CARD + ' space-y-3'}>
-            <div className="text-sm font-semibold text-white">Journey Shuru Karo</div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Beejai Ki Tarikh</label>
-              <input type="date" className={INPUT} value={sowDate} onChange={e => setSowDate(e.target.value)} />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Zameen Ka Size (Acres)</label>
-              <input type="number" step="0.1" min="0.1" className={INPUT} placeholder="e.g. 2.5" value={landSize} onChange={e => setLandSize(e.target.value)} />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-400 mb-1">Pani Ka Source</label>
-              <select className={SELECT} value={irrigation} onChange={e => setIrrigation(e.target.value)}>
-                {IRRIGATION.map(o => <option key={o}>{o}</option>)}
-              </select>
-            </div>
-          </div>
-        </>
+          <button onClick={handleGeneratePlan} className="w-full kd-btn-primary text-white font-bold py-3.5 rounded-xl shadow-lg flex justify-center gap-2">
+            Generate Cultivation Plan
+          </button>
+        </div>
       )}
-      <ErrorAlert error={err} />
-      <button className={BTN_PRI} onClick={startJourney} disabled={loading}>🌱 Journey Shuru Karo</button>
-    </div>
-  )
 
-  // ── STARTING ──────────────────────────────────────────────────────────────
-  if (mode === 'starting') return (
-    <div className="py-20 flex flex-col items-center gap-5 text-center">
-      <div className="text-6xl animate-bounce">{cropEmoji(selCrop)}</div>
-      <div>
-        <h2 className="text-xl font-bold text-white mb-2">Weather-Aware Calendar Ban Raha Hai</h2>
-        <p className="text-gray-400 text-sm">AI {selCrop} ke liye mausam ke saath poori planning bana raha hai</p>
-        <p className="text-gray-500 text-xs mt-1">Har hafte ka mausam + tasks + kharcha — 20-30 seconds...</p>
-      </div>
-      <SpinnerIcon />
-    </div>
-  )
-
-  // ── REPORT ────────────────────────────────────────────────────────────────
-  if (mode === 'report' && journey) {
-    const rpt = journey.report
-    return (
-      <div className="py-6 space-y-4">
-        <div className="text-center">
-          <div className="text-4xl mb-2">🏆</div>
-          <h2 className="text-xl font-bold text-white">Journey Poori!</h2>
-          <p className="text-gray-400 text-sm capitalize">{cropEmoji(journey.crop_type)} {journey.crop_type} · {journey.location}</p>
-          {journey.plan_updates_count > 0 && (
-            <p className="text-blue-400 text-xs mt-1">🔄 {journey.plan_updates_count} baar plan update hua mausam ke hisaab se</p>
-          )}
-        </div>
-        {rpt && (
-          <>
-            <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 space-y-2">
-              <p className="text-gray-200 text-sm">{rpt.summary_hinglish}</p>
-              {rpt.care_score && (
-                <div className="flex items-center gap-2 mt-2">
-                  <div className="flex-1 bg-gray-700 rounded-full h-1.5">
-                    <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${rpt.care_score}%` }} />
-                  </div>
-                  <span className="text-green-400 text-xs font-bold">{rpt.care_score}/100</span>
-                </div>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {[['Kul Kharcha', rpt.total_cost_estimate, 'text-red-400'],
-                ['Net Profit', rpt.net_profit_estimate, 'text-green-400'],
-                ['Paidawar', rpt.yield_achieved, 'text-blue-400'],
-                ['ROI', rpt.roi_percent ? `${rpt.roi_percent}%` : '—', 'text-amber-400'],
-              ].map(([l, v, c]) => (
-                <div key={l} className={CARD + ' text-center'}>
-                  <div className="text-xs text-gray-400 mb-1">{l}</div>
-                  <div className={`font-bold text-sm ${c}`}>{v}</div>
-                </div>
-              ))}
-            </div>
-            {rpt.weather_impact && (
-              <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3">
-                <div className="text-xs text-blue-400 font-semibold mb-1">🌤️ Mausam Ka Asar</div>
-                <p className="text-gray-300 text-sm">{rpt.weather_impact}</p>
-              </div>
-            )}
-            {rpt.highlights?.length > 0 && (
-              <div className={CARD}><div className="text-xs text-gray-400 uppercase tracking-wide mb-2">✨ Highlights</div>
-                {rpt.highlights.map(h => <div key={h} className="text-gray-300 text-sm">• {h}</div>)}
-              </div>
-            )}
-            {rpt.lessons?.length > 0 && (
-              <div className={CARD}><div className="text-xs text-gray-400 uppercase tracking-wide mb-2">📚 Sabak</div>
-                {rpt.lessons.map(l => <div key={l} className="text-gray-300 text-sm">• {l}</div>)}
-              </div>
-            )}
-            {rpt.next_season_tip && (
-              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
-                <div className="text-xs text-amber-400 font-semibold mb-1">🔭 Agla Sezon</div>
-                <p className="text-gray-300 text-sm">{rpt.next_season_tip}</p>
-              </div>
-            )}
-          </>
-        )}
-        <button className={BTN_PRI} onClick={downloadReport}>📄 PDF Report Download Karo</button>
-
-        {/* Sell your crop — Grade → Negotiate pipeline */}
-        <div className="bg-gradient-to-br from-green-900/30 to-emerald-900/20 border border-green-500/30 rounded-xl p-4 space-y-3">
-          <div className="text-white font-semibold text-sm text-center">🌾 Ab Apni Fasal Beche</div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => { localStorage.setItem('kd_harvest_crop', journey.crop_type); navigate('/grade') }}
-              className="bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 text-sm py-3 rounded-xl transition font-medium flex flex-col items-center gap-1">
-              <span className="text-xl">📸</span>
-              <span className="text-xs">Agmark Grade Karo</span>
-            </button>
-            <button
-              onClick={() => { localStorage.setItem('kd_harvest_crop', journey.crop_type); navigate('/negotiate') }}
-              className="bg-green-600/20 hover:bg-green-600/30 border border-green-500/30 text-green-300 text-sm py-3 rounded-xl transition font-medium flex flex-col items-center gap-1">
-              <span className="text-xl">🤝</span>
-              <span className="text-xs">Daam Negotiate Karo</span>
-            </button>
-          </div>
-          <p className="text-[10px] text-gray-500 text-center">
-            Grade A = 25% premium · Grade B = 15% premium over modal price
-          </p>
-        </div>
-
-        <button onClick={resetJourney} className="w-full text-center text-gray-500 text-sm hover:text-gray-300 transition py-2">
-          Nayi Journey Shuru Karo
-        </button>
-      </div>
-    )
-  }
-
-  // ── DASHBOARD ─────────────────────────────────────────────────────────────
-  if (mode === 'dashboard' && journey) {
-    const curWeek = calcCurrentWeek(journey.sowing_date, journey.total_weeks)
-    const curWeekData = journey.task_calendar?.find(w => w.week === curWeek) || journey.task_calendar?.[0]
-    const progress = journey.tasks_total > 0 ? Math.round((journey.tasks_completed / journey.tasks_total) * 100) : 0
-    const photoTask = curWeekData?.tasks?.find(t => t.photo_needed)
-    const detectedState = extractState(journey.location)
-    const filteredSchemes = HARDCODED_SCHEMES.filter(s => s.state === 'all' || s.state === detectedState)
-
-    return (
-      <div className="py-4 space-y-3">
-        {/* Header card */}
-        <div className={CARD + ' space-y-2'}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">{cropEmoji(journey.crop_type)}</span>
+      {/* STEP: DASHBOARD */}
+      {step === 'dashboard' && plan && (
+        <div className="flex-1 flex flex-col">
+          {/* Dashboard Header */}
+          <div className="p-5 rounded-2xl mb-6 relative overflow-hidden text-white shadow-xl"
+               style={{ background: 'linear-gradient(135deg, #16a34a, #15803d)' }}>
+            <div className="absolute right-0 top-0 bottom-0 w-1/2 opacity-20 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]" />
+            <div className="relative z-10 flex justify-between items-center">
               <div>
-                <div className="text-white font-bold capitalize">{journey.crop_type}</div>
-                <div className="text-gray-400 text-xs">{journey.location}</div>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <CropBadge crop={recommendation?.crop} className="bg-white/20 text-white border-white/30" />
+                </div>
+                <h2 className="text-2xl font-black font-display leading-tight">{location}</h2>
+                <p className="text-xs text-green-100 font-medium mt-1">Active Cultivation Plan</p>
+              </div>
+              <div className="text-center">
+                <ProgressRing pct={getProgress()} size={56} stroke={4} color="#fff" label={`${getProgress()}%`} />
               </div>
             </div>
-            <div className="text-right">
-              <div className="text-green-400 font-bold text-sm">Week {curWeek}/{journey.total_weeks}</div>
-              <div className="text-gray-400 text-xs">{curWeekData?.stage}</div>
-              {journey.plan_updates_count > 0 && (
-                <div className="text-[10px] text-blue-400">🔄 {journey.plan_updates_count} updates</div>
-              )}
-            </div>
           </div>
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs text-gray-400">
-              <span>Progress</span><span>{progress}% · {journey.tasks_completed}/{journey.tasks_total} tasks</span>
-            </div>
-            <div className="w-full bg-gray-700 rounded-full h-2">
-              <div className="bg-green-500 h-2 rounded-full transition-all duration-500" style={{ width: `${progress}%` }} />
-            </div>
-          </div>
-        </div>
 
-        {/* Plan updated banner */}
-        {planUpdated !== null && (
-          <div className={`rounded-lg p-2.5 text-xs flex items-center gap-2 ${
-            planUpdated > 0 ? 'bg-blue-500/10 border border-blue-500/20 text-blue-300' : 'bg-gray-700/40 text-gray-400'
-          }`}>
-            {planUpdated > 0
-              ? <>🔄 Plan update hua! {planUpdated} hafte ki tasks mausam ke hisaab se revise ki gayi</>
-              : <>✓ Plan theek hai — koi major changes zaroori nahi</>}
-          </div>
-        )}
-
-        {/* Tabs */}
-        <div className="flex bg-gray-800/60 rounded-xl p-1 border border-gray-700/40">
-          {[['tasks','📋 Tasks'],['weather','🌤️ Mausam'],['subsidies','🏛️ Sahayata'],['timeline','📅 Timeline']].map(([tab, label]) => (
-            <button key={tab} onClick={() => setActiveTab(tab)}
-              className={`flex-1 text-xs py-1.5 rounded-lg font-medium transition ${
-                activeTab === tab ? 'bg-green-600 text-white' : 'text-gray-400 hover:text-gray-200'
-              }`}>{label}</button>
-          ))}
-        </div>
-
-        <ErrorAlert error={err} />
-
-        {/* ── TASKS TAB ── */}
-        {activeTab === 'tasks' && curWeekData && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-white font-semibold">Week {curWeekData.week} — {curWeekData.stage}</div>
-                <div className="text-gray-400 text-xs">{curWeekData.date_range || curWeekData.days_range}</div>
-              </div>
-              <div className="flex items-center gap-2">
-                {photoTask && (
-                  <>
-                    <button onClick={() => { setPhotoWeek(curWeek); setPhotoStage(curWeekData.stage); cropPhotoRef.current?.click() }}
-                      disabled={loading}
-                      className="bg-purple-600/20 border border-purple-500/40 text-purple-400 text-xs px-2.5 py-1.5 rounded-lg hover:bg-purple-600/30 transition flex items-center gap-1">
-                      {loading ? <SpinnerIcon /> : '📸'} Photo Check
-                    </button>
-                    <input ref={cropPhotoRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleCropPhoto} />
-                  </>
+          {/* Tabs */}
+          <div className="flex gap-2 mb-6 border-b pb-0.5" style={{ borderColor: 'var(--border-subtle)' }}>
+            {[
+              { id: 'tasks', label: 'Tasks', icon: '📋' },
+              { id: 'subsidies', label: 'Subsidies', icon: '🏛️' },
+              { id: 'report', label: 'Report', icon: '📊' }
+            ].map(tab => (
+              <button 
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-4 py-2 text-xs font-bold tracking-wide uppercase font-display relative transition-colors ${activeTab === tab.id ? 'text-green-500' : ''}`}
+                style={{ color: activeTab === tab.id ? '#22c55e' : 'var(--text-muted)' }}
+              >
+                {tab.icon} {tab.label}
+                {activeTab === tab.id && (
+                  <div className="absolute bottom-[-1.5px] left-0 w-full h-[3px] bg-green-500 rounded-t-full shadow-[0_-2px_10px_rgba(34,197,94,0.5)]" />
                 )}
-              </div>
-            </div>
+              </button>
+            ))}
+          </div>
 
-            {/* Current week weather */}
-            {curWeekData.expected_weather?.conditions && (
-              <div className={`rounded-lg p-2.5 flex items-start gap-2 text-xs ${
-                curWeekData.expected_weather.frost_risk ? 'bg-blue-900/20 border border-blue-500/20 text-blue-300'
-                : curWeekData.expected_weather.heat_stress ? 'bg-red-900/20 border border-red-500/20 text-red-300'
-                : 'bg-gray-700/30 border border-gray-600/30 text-gray-300'
-              }`}>
-                <span className="text-base">{WEATHER_ICON(curWeekData.expected_weather)}</span>
-                <div>
-                  <div className="font-medium">{curWeekData.expected_weather.conditions}</div>
-                  <div className="text-gray-400 mt-0.5">
-                    {curWeekData.expected_weather.temp_range} · {curWeekData.expected_weather.rain_mm_week || 0}mm baarish
-                    {curWeekData.expected_weather.frost_risk && ' · ❄️ Frost risk'}
-                    {curWeekData.expected_weather.heat_stress && ' · 🌡️ Heat stress'}
-                  </div>
-                  {curWeekData.weather_advisory && <div className="text-amber-400 mt-1">⚠️ {curWeekData.weather_advisory}</div>}
-                </div>
-              </div>
-            )}
-
-            {/* Tasks list */}
-            <div className="space-y-2">
-              {curWeekData.tasks?.map(task => {
-                const done = journey.completed_tasks.includes(task.task_id)
-                return (
-                  <div key={task.task_id} onClick={() => toggleTask(task.task_id)}
-                    className={`${CARD} cursor-pointer transition-all ${done ? 'opacity-60 bg-green-900/15' : 'hover:border-gray-600'}`}>
-                    <div className="flex items-start gap-3">
-                      <div className={`mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition ${done ? 'bg-green-600 border-green-600' : 'border-gray-500'}`}>
-                        {done && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                        </svg>}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span>{TASK_ICON[task.category] || '📌'}</span>
-                          <span className="text-sm font-medium text-white">{task.title}</span>
-                          {task.critical && <span className="text-[9px] bg-red-500/20 text-red-400 px-1 py-0.5 rounded">Critical</span>}
-                          {task.photo_needed && <span className="text-[9px] bg-purple-500/20 text-purple-400 px-1 py-0.5 rounded">📸</span>}
+          {/* TAB: TASKS */}
+          {activeTab === 'tasks' && (
+            <div className="space-y-6 flex-1 pb-4">
+              <div className="relative">
+                {/* Vertical Timeline Line */}
+                <div className="absolute left-[19px] top-6 bottom-0 w-[2px] bg-green-500/20" />
+                
+                <div className="space-y-6">
+                  {plan.map((week, wIdx) => {
+                    const isCurrent = wIdx === 0; // Simple mock for current week
+                    return (
+                      <div key={wIdx} className="relative pl-12 pr-1">
+                        {/* Timeline Node */}
+                        <div className={`absolute left-0 top-1.5 w-10 h-10 rounded-full border-4 flex items-center justify-center font-bold text-xs bg-[var(--bg-base)] z-10 transition-colors ${
+                          isCurrent ? 'border-green-500 text-green-500' : 'border-[var(--border-subtle)] text-[var(--text-muted)]'
+                        }`}>
+                          W{week.week}
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">{task.desc}</p>
-                        {task.weather_condition && <p className="text-[10px] text-amber-400 mt-1">⚠️ {task.weather_condition}</p>}
-                        {(task.water_liters_per_acre > 0 || task.inputs?.length > 0) && (
-                          <div className="mt-1.5 flex flex-wrap gap-1">
-                            {task.water_liters_per_acre > 0 && (
-                              <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-1.5 py-0.5 rounded">
-                                💧{task.water_liters_per_acre.toLocaleString()}L/acre
-                              </span>
-                            )}
-                            {task.inputs?.map(inp => (
-                              <span key={inp.name} className="text-[10px] bg-gray-700/60 text-gray-300 border border-gray-600/30 px-1.5 py-0.5 rounded">
-                                {inp.name} {inp.quantity}{inp.cost_approx ? ` (${inp.cost_approx})` : ''}
-                              </span>
+                        
+                        <div className={`${KD_CARD} p-4 ${isCurrent ? 'border-green-500/50 shadow-lg shadow-green-500/5' : ''}`}>
+                          <h3 className="font-bold text-sm font-display mb-1" style={{ color: 'var(--text-primary)' }}>{week.title || week.stage || `Week ${week.week}`}</h3>
+                          <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>{week.focus || week.weather_advisory || week.date_range || week.days_range || ''}</p>
+                          
+                          <div className="space-y-2.5">
+                            {week.tasks.map((task, tIdx) => (
+                              <div key={tIdx} 
+                                   onClick={() => toggleTask(wIdx, tIdx)}
+                                   className={`task-row-${wIdx}-${tIdx} flex items-start gap-3 p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                                     task.completed ? 'border-green-500/30 bg-green-500/5' : 'border-[var(--border-card)] bg-[var(--bg-card-2)] hover:border-green-500/30'
+                                   }`}>
+                                <div className={`w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 transition-colors ${
+                                  task.completed ? 'bg-green-500 border-green-500 text-white' : 'border-[var(--border-subtle)]'
+                                }`}>
+                                  {task.completed && <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} className="w-3 h-3"><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>}
+                                </div>
+                                <span className={`text-sm leading-snug ${task.completed ? 'line-through opacity-50' : ''}`} style={{ color: 'var(--text-primary)' }}>
+                                  {task.desc}
+                                </span>
+                              </div>
                             ))}
                           </div>
-                        )}
-                        <ChemicalDetail chemicals={task.chemicals} />
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Update plan / complete journey */}
-            <div className="flex gap-2 pt-1">
-              <button onClick={() => updatePlan('manual')} disabled={updatingPlan}
-                className="flex-1 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/30 text-blue-400 text-xs py-2 rounded-xl transition flex items-center justify-center gap-1">
-                {updatingPlan ? <><SpinnerIcon /> Updating...</> : '🔄 Mausam Se Plan Update Karo'}
-              </button>
-              {curWeek >= journey.total_weeks && (
-                <button onClick={() => setCompleteModal(true)}
-                  className="flex-1 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/30 text-amber-400 text-xs py-2 rounded-xl transition">
-                  🏆 Journey Khatam
-                </button>
-              )}
-            </div>
-
-            {/* Post-harvest sell CTA — shown when last week reached */}
-            {curWeek >= journey.total_weeks && (
-              <div className="bg-gradient-to-br from-green-900/30 to-emerald-900/20 border border-green-500/30 rounded-xl p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">{cropEmoji(journey.crop_type)}</span>
-                  <div>
-                    <div className="text-white font-bold text-sm">Fasal Harvest Ready Hai!</div>
-                    <div className="text-green-400 text-xs">Grade karwao aur best price mein beche</div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => { localStorage.setItem('kd_harvest_crop', journey.crop_type); navigate('/grade') }}
-                    className="bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 text-xs py-2.5 px-3 rounded-xl transition flex items-center justify-center gap-1.5 font-medium">
-                    📸 Fasal Grade Karo
-                  </button>
-                  <button
-                    onClick={() => { localStorage.setItem('kd_harvest_crop', journey.crop_type); navigate('/negotiate') }}
-                    className="bg-green-600/20 hover:bg-green-600/30 border border-green-500/30 text-green-300 text-xs py-2.5 px-3 rounded-xl transition flex items-center justify-center gap-1.5 font-medium">
-                    🤝 Mandi Mein Beche
-                  </button>
-                </div>
-                <p className="text-[10px] text-gray-500 text-center">
-                  Grade karke negotiate karne par 10-25% zyada daam milta hai
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── WEATHER TAB ── */}
-        {activeTab === 'weather' && (
-          <div className="space-y-3">
-            {!wxData && <div className="text-center py-8"><SpinnerIcon /></div>}
-            {wxData?.current && (
-              <>
-                <div className={CARD + ' space-y-3'}>
-                  <div className="flex items-center gap-2">
-                    <div className="text-xs text-gray-400 uppercase tracking-wide">Abhi Ka Mausam — {wxData.location}</div>
-                    {wxData.source === 'ai_estimate' && (
-                      <span className="text-[9px] bg-amber-500/20 text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded font-semibold">AI Estimate</span>
-                    )}
-                    {wxData.source === 'static_fallback' && (
-                      <span className="text-[9px] bg-red-500/20 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded">Offline</span>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-4xl font-bold text-white">{wxData.current.temp_c}°C</div>
-                      <div className="text-gray-400 text-sm">{wxData.current.desc}</div>
-                    </div>
-                    <div className="text-right space-y-1 text-xs text-gray-400">
-                      <div>Nami: <span className="text-blue-400">{wxData.current.humidity}%</span></div>
-                      <div>Hawa: <span className="text-gray-200">{wxData.current.wind_kmph} km/h</span></div>
-                      <div>Feels: <span className="text-gray-200">{wxData.current.feels_like_c}°C</span></div>
-                    </div>
-                  </div>
-                  {wxData.advisory && (
-                    <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-2">
-                      <p className="text-amber-300 text-xs">⚠️ {wxData.advisory}</p>
-                    </div>
-                  )}
-                </div>
-                {wxData.forecast?.length > 0 && (
-                  <div className={CARD + ' space-y-2'}>
-                    <div className="text-xs text-gray-400 uppercase tracking-wide">Agle {wxData.forecast.length} Din</div>
-                    {wxData.forecast.map(d => (
-                      <div key={d.date} className="flex items-center justify-between py-1.5 border-b border-gray-700/40 last:border-0">
-                        <div className="text-xs text-gray-300 w-24">{d.date}</div>
-                        <div className="text-xs text-gray-300 flex-1">{d.desc}</div>
-                        <div className="text-xs text-right">
-                          <span className="text-orange-400">{d.max_c}°</span>
-                          <span className="text-gray-500"> / </span>
-                          <span className="text-blue-400">{d.min_c}°</span>
-                          {d.precip_mm > 0 && <span className="ml-1 text-blue-300">💧{d.precip_mm}mm</span>}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-                {/* Upcoming week weather from calendar */}
-                <div className={CARD + ' space-y-2'}>
-                  <div className="text-xs text-gray-400 uppercase tracking-wide">Is Hafte Ki Mausam (AI Forecast)</div>
-                  {curWeekData?.expected_weather && (
-                    <div className="space-y-1">
-                      <div className="text-white font-medium text-sm">{WEATHER_ICON(curWeekData.expected_weather)} {curWeekData.expected_weather.conditions}</div>
-                      <div className="text-xs text-gray-400">{curWeekData.expected_weather.temp_range} · Nami {curWeekData.expected_weather.humidity_pct}% · Baarish {curWeekData.expected_weather.rain_mm_week || 0}mm</div>
-                      {curWeekData.weather_advisory && <div className="text-xs text-amber-400">⚠️ {curWeekData.weather_advisory}</div>}
-                    </div>
-                  )}
+                    )
+                  })}
                 </div>
-              </>
-            )}
-            {wxData?.error && <div className="text-center text-gray-500 text-sm py-8">Weather unavailable</div>}
-          </div>
-        )}
-
-        {/* ── SUBSIDIES TAB ── */}
-        {activeTab === 'subsidies' && (
-          <div className="space-y-3">
-            {subLoading && <div className="text-center py-6"><SpinnerIcon /></div>}
-            {subsidies.length > 0 && (
-              <div className="space-y-2">
-                <div className="text-xs text-gray-400 uppercase tracking-wide">Live Govt Alerts</div>
-                {subsidies.map((s, i) => (
-                  <div key={i} className={CARD + ' space-y-1'}>
-                    <div className="text-xs text-green-400 font-semibold">{s.source}</div>
-                    <div className="text-sm font-medium text-white">{s.title}</div>
-                    {s.summary && <p className="text-xs text-gray-400 line-clamp-3">{s.summary}</p>}
-                    <div className="flex items-center justify-between">
-                      {s.published && <div className="text-[10px] text-gray-500">{s.published}</div>}
-                      {s.link && <a href={s.link} target="_blank" rel="noopener noreferrer" className="text-xs text-green-400 hover:text-green-300">Aur Padhe →</a>}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div>
-              <div className="text-xs text-gray-400 uppercase tracking-wide mb-2">
-                Aapke Liye Schemes — {filteredSchemes.length} milye
-              </div>
-              <div className="space-y-2">
-                {filteredSchemes.map(s => (
-                  <div key={s.id} className={CARD + ' space-y-1'}>
-                    <div className="flex items-center justify-between">
-                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${s.state === 'all' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>{s.tag}</span>
-                    </div>
-                    <div className="text-sm font-medium text-white">{s.name}</div>
-                    <p className="text-xs text-gray-400">{s.desc}</p>
-                    <a href={s.link} target="_blank" rel="noopener noreferrer" className="text-xs text-green-400 hover:text-green-300 inline-block">Apply karo →</a>
-                  </div>
-                ))}
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* ── TIMELINE TAB ── */}
-        {activeTab === 'timeline' && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="text-xs text-gray-400">Poori Journey — {journey.total_weeks} hafte</div>
-              <button onClick={() => updatePlan('manual')} disabled={updatingPlan}
-                className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1 transition">
-                {updatingPlan ? <SpinnerIcon /> : '🔄'} Refresh Plan
-              </button>
-            </div>
-            <div className="space-y-1.5">
-              {journey.task_calendar?.map(week => (
-                <WeekCard key={week.week} week={week} curWeek={curWeek}
-                  completedTasks={journey.completed_tasks}
-                  onToggleTask={toggleTask} />
+          {/* TAB: SUBSIDIES */}
+          {activeTab === 'subsidies' && (
+            <div className="space-y-4 flex-1">
+              <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 mb-2">
+                <p className="text-xs font-bold text-blue-500 uppercase tracking-widest font-display mb-1">Eligible Schemes</p>
+                <p className="text-sm" style={{ color: 'var(--text-primary)' }}>Based on your profile, you can apply for these government schemes.</p>
+              </div>
+              
+              {mockSubsidies.map((sub, i) => (
+                <div key={i} className={`${KD_CARD} p-4 hover:-translate-y-1 transition-transform group border-l-4 border-l-amber-500`}>
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-bold text-sm font-display leading-tight pr-4" style={{ color: 'var(--text-primary)' }}>{sub.title}</h3>
+                    <span className="text-xs bg-green-500/10 text-green-500 px-2 py-0.5 rounded font-bold">Active</span>
+                  </div>
+                  <p className="text-xs leading-relaxed mb-3" style={{ color: 'var(--text-muted)' }}>{sub.desc}</p>
+                  <a href={sub.link} className="text-xs font-bold text-amber-500 flex items-center gap-1 group-hover:text-amber-400">
+                    Learn more & apply <span className="group-hover:translate-x-1 transition-transform">→</span>
+                  </a>
+                </div>
               ))}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* ── Photo result modal ── */}
-        {photoModal && photoResult && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end">
-            <div className="bg-gray-900 border-t border-gray-700 rounded-t-2xl w-full p-5 space-y-3 max-h-[85vh] overflow-y-auto">
-              <div className="flex items-center justify-between">
-                <h3 className="font-bold text-white">Crop Health Report</h3>
-                <button onClick={() => setPhotoModal(false)} className="text-gray-400 hover:text-white text-xl">✕</button>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className={`text-4xl font-bold ${photoResult.health_score >= 75 ? 'text-green-400' : photoResult.health_score >= 50 ? 'text-amber-400' : 'text-red-400'}`}>
-                  {photoResult.health_score}
+          {/* TAB: REPORT */}
+          {activeTab === 'report' && (
+            <div className="space-y-4 flex-1">
+              <div className="grid grid-cols-2 gap-4 mb-2">
+                <div className={`${KD_CARD} p-4 text-center`}>
+                  <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Est. Yield</p>
+                  <p className="text-xl font-black font-display text-green-500">2.4 <span className="text-sm font-medium opacity-70">Tons</span></p>
                 </div>
-                <div>
-                  <div className="text-white font-medium capitalize">{photoResult.status?.replace(/_/g, ' ')}</div>
-                  <div className="text-gray-400 text-xs">Health Score / 100</div>
+                <div className={`${KD_CARD} p-4 text-center`}>
+                  <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>Projected ROI</p>
+                  <p className="text-xl font-black font-display text-amber-500">145<span className="text-sm font-medium opacity-70">%</span></p>
                 </div>
               </div>
-              <div className="w-full bg-gray-700 rounded-full h-2">
-                <div className={`h-2 rounded-full transition-all ${photoResult.health_score >= 75 ? 'bg-green-500' : photoResult.health_score >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
-                  style={{ width: `${photoResult.health_score}%` }} />
+              
+              <div className={`${KD_CARD} p-5 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] bg-green-500/5`}>
+                <h3 className="font-bold font-display mb-4 flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                  <span>🏆</span> Achievements
+                </h3>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-base)] border border-[var(--border-subtle)]">
+                    <div className="w-10 h-10 rounded-full bg-amber-500/20 text-amber-500 flex items-center justify-center text-lg shadow-[0_0_10px_rgba(245,158,11,0.3)]">⭐</div>
+                    <div>
+                      <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Smart Planner</p>
+                      <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Generated first AI plan</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--bg-base)] border border-[var(--border-subtle)] opacity-50 grayscale">
+                    <div className="w-10 h-10 rounded-full bg-gray-500/20 flex items-center justify-center text-lg">🔒</div>
+                    <div>
+                      <p className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>Perfect Week</p>
+                      <p className="text-[10px]" style={{ color: 'var(--text-muted)' }}>Complete all tasks in a week</p>
+                    </div>
+                  </div>
+                </div>
               </div>
-              {photoResult.observations?.length > 0 && (
-                <div className="space-y-1">
-                  {photoResult.observations.map(o => <div key={o} className="text-gray-300 text-sm">• {o}</div>)}
-                </div>
-              )}
-              {photoResult.weather_related_risks?.length > 0 && (
-                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3 space-y-1">
-                  <div className="text-xs text-blue-400 font-semibold">🌤️ Mausam Se Khatra</div>
-                  {photoResult.weather_related_risks.map(r => <div key={r} className="text-gray-300 text-xs">• {r}</div>)}
-                </div>
-              )}
-              {photoResult.immediate_action && (
-                <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3">
-                  <div className="text-xs text-amber-400 font-semibold mb-1">⚡ Abhi Kya Kare</div>
-                  <p className="text-gray-200 text-sm">{photoResult.immediate_action}</p>
-                </div>
-              )}
-              {photoResult.do_not_do?.length > 0 && (
-                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 space-y-1">
-                  <div className="text-xs text-red-400 font-semibold">🚫 Yeh Mat Karo</div>
-                  {photoResult.do_not_do.map(d => <div key={d} className="text-gray-300 text-xs">• {d}</div>)}
-                </div>
-              )}
-              {photoResult.plan_update_needed && (
-                <div className="bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
-                  <div className="text-xs text-blue-400 font-semibold mb-1">🔄 Plan Update Hua</div>
-                  <p className="text-gray-300 text-xs">Crop condition ke hisaab se aage ke weeks update ho rahe hain...</p>
-                </div>
-              )}
-              {photoResult.subsidy_claim_tip && (
-                <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3">
-                  <div className="text-xs text-green-400 font-semibold mb-1">🏛️ Subsidy Tip</div>
-                  <p className="text-gray-200 text-sm">{photoResult.subsidy_claim_tip}</p>
-                </div>
-              )}
-              <button onClick={() => setPhotoModal(false)} className={BTN_PRI}>Samjha ✓</button>
-            </div>
-          </div>
-        )}
 
-        {/* ── Complete journey modal ── */}
-        {completeModal && (
-          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-end">
-            <div className="bg-gray-900 border-t border-gray-700 rounded-t-2xl w-full p-5 space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="font-bold text-white">Journey Khatam Karo</h3>
-                <button onClick={() => setCompleteModal(false)} className="text-gray-400 hover:text-white text-xl">✕</button>
-              </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Bikri Ka Bhav (₹/kg)</label>
-                <input type="number" step="0.5" min="0" className={INPUT} placeholder="e.g. 22.50" value={sellPrice} onChange={e => setSellPrice(e.target.value)} />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-400 mb-1">Total Qty Becha (kg) — Optional</label>
-                <input type="number" step="1" min="0" className={INPUT} placeholder="e.g. 2500" value={qtySold} onChange={e => setQtySold(e.target.value)} />
-              </div>
-              <ErrorAlert error={err} />
-              <button className={BTN_PRI} onClick={completeJourney} disabled={loading}>
-                {loading ? <><SpinnerIcon /> AI Report Ban Raha Hai...</> : '🏆 Poori Karo & Report Dekho'}
+              <button onClick={() => setStep('intro')} className="w-full py-3 text-xs font-bold mt-4" style={{ color: 'var(--text-muted)' }}>
+                Restart Journey
               </button>
             </div>
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  return null
+          )}
+        </div>
+      )}
+    </div>
+  )
 }

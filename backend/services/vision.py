@@ -43,12 +43,26 @@ def _extract_json_payload(raw_text: str) -> dict:
 def _fallback_grade(crop_type: str) -> GradeResponse:
     detected = crop_type if crop_type.lower() not in ("auto", "") else None
     return GradeResponse(
+        is_valid=True,
         grade="B",
         defects=["manual_review_recommended"],
         estimated_price_band="₹18-22/kg",
         confidence=0.35,
-        agmark_standard=f"Fallback estimate — please retry with clearer image",
+        agmark_standard="Fallback estimate — please retry with clearer image",
         detected_crop_type=detected,
+    )
+
+
+def _invalid_response(reason: str) -> GradeResponse:
+    return GradeResponse(
+        is_valid=False,
+        invalid_reason=reason,
+        grade=None,
+        defects=[],
+        estimated_price_band="N/A",
+        confidence=0.0,
+        agmark_standard="N/A",
+        detected_crop_type=None,
     )
 
 
@@ -75,11 +89,18 @@ async def grade_crop_image(image_b64: str, crop_type: str) -> GradeResponse:
 
     prompt = f"""You are an expert Indian agricultural quality inspector applying official Agmark grading standards.
 
+Your FIRST task is to check if the image contains an agricultural crop, vegetable, fruit, or grain.
+- If the image does NOT contain any crop/vegetable/fruit/grain (e.g. it shows a person, animal, vehicle, building, landscape, text, etc.), you MUST respond ONLY with:
+  {{"is_valid": false, "invalid_reason": "<one sentence explaining what the image actually shows and why it cannot be graded>"}}
+- Do NOT attempt to grade a non-agricultural image. Do NOT assign a grade to it.
+
+If the image IS a crop/vegetable/fruit/grain, proceed with grading:
 {crop_line}
 Agmark Standards: {agmark_info}
 
-Inspect the image carefully and respond ONLY with this exact JSON (no markdown, no explanation):
+Respond ONLY with this exact JSON (no markdown, no explanation):
 {{
+  "is_valid": true,
 {detected_field}  "grade": "A" or "B" or "C",
   "defects": ["defect1", "defect2"],
   "estimated_price_band": "₹XX-YY/kg",
@@ -87,7 +108,7 @@ Inspect the image carefully and respond ONLY with this exact JSON (no markdown, 
   "agmark_standard": "brief description of which standard applied"
 }}
 
-If you cannot identify a crop or the image is unclear, set confidence to 0.15 and grade to "C"."""
+If the image is a crop but you cannot determine quality clearly, set confidence to 0.15 and grade to "C"."""
 
     try:
         client = genai.Client(api_key=settings.GEMINI_API_KEY)
@@ -98,7 +119,13 @@ If you cannot identify a crop or the image is unclear, set confidence to 0.15 an
             contents=[prompt, image_part],
         )
         result = _extract_json_payload(response.text)
+
+        # Handle invalid/non-crop image response
+        if not result.get("is_valid", True):
+            return _invalid_response(result.get("invalid_reason", "Image does not contain a recognizable crop."))
+
         # Ensure detected_crop_type is populated for auto mode
+        result["is_valid"] = True
         if auto_mode and "detected_crop_type" not in result:
             result["detected_crop_type"] = "unknown"
         elif not auto_mode:

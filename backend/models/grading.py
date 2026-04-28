@@ -20,11 +20,13 @@ class GradeRequest(BaseModel):
 class GradeResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    grade: Literal["A", "B", "C"]
+    is_valid: bool = True                          # False if image is not a crop/vegetable/fruit
+    invalid_reason: Optional[str] = None           # human-readable reason when is_valid=False
+    grade: Optional[Literal["A", "B", "C"]] = None
     defects: list[str] = Field(default_factory=list)
-    estimated_price_band: str = Field(min_length=1)
-    confidence: float = Field(ge=0.0, le=1.0)
-    agmark_standard: str = Field(min_length=1)
+    estimated_price_band: str = Field(default="N/A")
+    confidence: float = Field(ge=0.0, le=1.0, default=0.0)
+    agmark_standard: str = Field(default="N/A")
     detected_crop_type: Optional[str] = None   # populated when crop_type="auto"
 
     @field_validator("estimated_price_band", "agmark_standard", mode="before")
