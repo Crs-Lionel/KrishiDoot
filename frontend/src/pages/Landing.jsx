@@ -1,325 +1,142 @@
-import { useEffect, useRef } from 'react'
+﻿import { useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { gsap } from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import Lenis from 'lenis'
 import { Swiper, SwiperSlide } from 'swiper/react'
 import { Autoplay, Pagination } from 'swiper/modules'
-import * as THREE from 'three'
 import 'swiper/css'
 import 'swiper/css/pagination'
-import { LeafIcon, KD_CARD, ThemeToggle, useTheme } from '../components/ui.jsx'
+import {
+  ArrowRightIcon,
+  CameraIcon,
+  ChartIcon,
+  LeafIcon,
+  MicIcon,
+  RainIcon,
+  ScaleIcon,
+  ShieldIcon,
+  SproutIcon,
+  StatusBadge,
+  SubsidyIcon,
+  SurfaceCard,
+  TimelineIcon,
+} from '../components/ui.jsx'
 
 gsap.registerPlugin(ScrollTrigger)
 
-const STATS = [
-  { value: 19,  suffix: '',   label: 'States covered'           },
-  { value: 94,  suffix: '%',  label: 'Negotiation success rate' },
-  { value: 50,  suffix: '+',  label: 'Crops supported'          },
-  { value: 2,   suffix: 'x',  label: 'Average price uplift'     },
+const HERO_SIGNALS = [
+  { value: '4', label: 'desks in one farmer workflow' },
+  { value: '1', label: 'decision chain from field to sale' },
+  { value: 'Now', label: 'start from the crop lot in hand' },
 ]
 
-const PAIN_POINTS = [
-  { title: 'No price transparency',  desc: 'Buyers quote arbitrary prices. Farmers have no real-time reference point.' },
-  { title: 'Information asymmetry',  desc: 'Buyers access APMC data in real time. Most farmers never see these numbers.' },
-  { title: 'Perishability pressure', desc: 'Spoilage risk forces farmers to accept whatever is offered, however low.' },
-  { title: 'No negotiation support', desc: 'Farmers negotiate alone against experienced traders every single day.' },
-]
-
-const STEPS = [
+const VALUE_LEAKS = [
   {
-    number: '01',
-    title:  'Grade your crop',
-    desc:   'Take a single photo. Gemini 1.5 Pro applies Agmark grading standards and estimates your price band in under 10 seconds.',
-    badge:  'Gemini Vision',
-    to:     '/grade',
-    cta:    'Try grading',
+    index: '01',
+    title: 'Nearest mandi is not always the strongest outcome.',
+    body: 'Price boards matter, but transport, arrivals, and route choice decide what actually lands in the farmer’s hand.',
+    kicker: 'Route risk',
   },
   {
-    number: '02',
-    title:  'Know your floor price',
-    desc:   "We fetch today's official APMC modal price and compute your BATNA — factoring in your actual transport cost.",
-    badge:  'data.gov.in',
-    to:     '/market',
-    cta:    'Check prices',
+    index: '02',
+    title: 'Ungraded produce gets negotiated like a guess.',
+    body: 'When the lot has no visible evidence behind it, the buyer starts from doubt and the seller starts from weakness.',
+    kicker: 'Quality risk',
   },
   {
-    number: '03',
-    title:  'Let the AI negotiate',
-    desc:   'Our LangGraph agent opens negotiation, adapts strategy based on crop perishability (Conceder vs Boulware), and closes at the best possible price.',
-    badge:  'LangGraph',
-    to:     '/negotiate',
-    cta:    'Start negotiation',
+    index: '03',
+    title: 'Weather advice, crop tasks, and subsidy timing stay fragmented.',
+    body: 'District advisories exist, but they do not usually flow into one simple seasonal operating rhythm for the farmer.',
+    kicker: 'Timing risk',
   },
 ]
 
-const FEATURES = [
+const RHYTHM = [
   {
-    title: 'Agmark AI Grading',
-    desc:  'Gemini Vision analyses your crop photo against official Agmark standards. Grade A, B, or C with confidence score.',
-    tag:   'Computer Vision',
-    paths: [
-      'M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z',
-      'M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z',
-    ],
+    eyebrow: 'Inspect',
+    title: 'Start from the lot in front of you.',
+    body: 'Capture the crop batch, detect the crop, and convert visible quality into a grade the farmer can stand behind.',
+    to: '/grade',
+    cta: 'Open grading desk',
+    Icon: CameraIcon,
+    image: 'https://images.unsplash.com/photo-1464226184884-fa280b87c399?w=1400&q=80&auto=format&fit=crop',
   },
   {
-    title: 'Live APMC Prices',
-    desc:  'Real-time official modal prices across 19 states and 50+ crops from data.gov.in. Updated every day at market open.',
-    tag:   'Live Data',
-    paths: [
-      'M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z',
-    ],
+    eyebrow: 'Compare',
+    title: 'See the mandi as net value, not noise.',
+    body: 'Rank destinations by what remains after freight, not by the loudest headline price in the market.',
+    to: '/market',
+    cta: 'Open mandi atlas',
+    Icon: ChartIcon,
+    image: 'https://images.unsplash.com/photo-1517022812141-23620dba5c23?w=1400&q=80&auto=format&fit=crop',
   },
   {
-    title: 'Strategy-Aware Agent',
-    desc:  'Conceder for perishables, Boulware for non-perishables. Proven game-theory negotiation tactics adapted per crop.',
-    tag:   'AI Agent',
-    paths: [
-      'M12 3v17.25m0 0c-1.472 0-2.882.265-4.185.75M12 20.25c1.472 0 2.882.265 4.185.75M18.75 4.97A48.416 48.416 0 0012 4.5c-2.291 0-4.545.16-6.75.47m13.5 0c1.01.143 2.01.317 3 .52m-3-.52l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.988 5.988 0 01-2.031.352 5.988 5.988 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L18.75 4.97zm-16.5.52c.99-.203 1.99-.377 3-.52m0 0l2.62 10.726c.122.499-.106 1.028-.589 1.202a5.989 5.989 0 01-2.031.352 5.989 5.989 0 01-2.031-.352c-.483-.174-.711-.703-.59-1.202L5.25 4.97z',
-    ],
+    eyebrow: 'Negotiate',
+    title: 'Carry grade-backed leverage into the deal.',
+    body: 'Protect the reservation floor, speak in Hinglish when needed, and track each counter like a real live mandi desk.',
+    to: '/negotiate',
+    cta: 'Open negotiation desk',
+    Icon: ScaleIcon,
+    image: 'https://images.unsplash.com/photo-1523741543316-beb7fc7023d8?w=1400&q=80&auto=format&fit=crop',
   },
   {
-    title: 'BATNA Price Floor',
-    desc:  'Your reservation price factors in your actual transport cost. The AI enforces your floor on every single negotiation round — it is never exposed to the buyer.',
-    tag:   'Guardrails',
-    paths: [
-      'M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z',
-    ],
-  },
-  {
-    title: 'Telegram Interface',
-    desc:  'Negotiate from any phone via Telegram — no smartphone required. Works on 2G data, anywhere in India.',
-    tag:   'Accessible',
-    paths: [
-      'M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 8.25h3',
-    ],
-  },
-  {
-    title: 'Installable PWA',
-    desc:  'Install directly from Chrome on Android. No app store, no waiting, no storage bloat. Works offline for price lookups.',
-    tag:   'PWA',
-    paths: [
-      'M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3',
-    ],
+    eyebrow: 'Plan',
+    title: 'Keep the season readable after the sale too.',
+    body: 'Turn weather, crop tasks, photo checks, and subsidy watch into one calmer weekly planning surface.',
+    to: '/grow',
+    cta: 'Open grow workspace',
+    Icon: SproutIcon,
+    image: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1400&q=80&auto=format&fit=crop',
   },
 ]
 
-const TECH = [
-  { name: 'Gemini 1.5 Pro',  role: 'Vision analysis & dialogue' },
-  { name: 'LangGraph',       role: 'Agent orchestration graph' },
-  { name: 'data.gov.in',     role: 'Official APMC price feed' },
-  { name: 'FastAPI',         role: 'Async Python API server' },
-  { name: 'Supabase',        role: 'PostgreSQL database' },
-  { name: 'PWA + Telegram',  role: 'Zero-friction delivery' },
+const CAPABILITIES = [
+  {
+    title: 'Hinglish voice support',
+    body: 'Speak instead of typing when the farmer is moving fast or the field is not a desk.',
+    Icon: MicIcon,
+    tone: 'leaf',
+  },
+  {
+    title: 'Weather-aware crop rhythm',
+    body: 'Shape weekly work with advisory context instead of treating weather as a disconnected widget.',
+    Icon: RainIcon,
+    tone: 'rain',
+  },
+  {
+    title: 'Scheme and subsidy watch',
+    body: 'Surface support signals closer to the crop workflow instead of hiding them in a separate search journey.',
+    Icon: SubsidyIcon,
+    tone: 'millet',
+  },
+  {
+    title: 'Farmer-first guardrails',
+    body: 'Reservation floors, clearer transcripts, and one coherent path from evidence to selling decision.',
+    Icon: ShieldIcon,
+    tone: 'default',
+  },
 ]
 
-// Unsplash photo IDs for testimonial strip
-const FARMER_PHOTOS = [
-  { id: 'photo-1594548474069-44c35052e541', name: 'Raju M.',   state: 'Karnataka',   crop: 'Tomato', gain: '₹3,200' },
-  { id: 'photo-1559827291-72f26f0f3812',   name: 'Sunita D.', state: 'Maharashtra', crop: 'Onion',  gain: '₹4,800' },
-  { id: 'photo-1507003211169-0a1dd7228f2d', name: 'Vikram S.', state: 'Punjab',      crop: 'Wheat',  gain: '₹6,100' },
+const SOURCE_LINES = [
+  'Mandi comparison shaped around price discovery and route economics.',
+  'Season planning informed by weather advisories and crop-task timing.',
+  'Photo-led grading so negotiation starts from visible evidence.',
+  'A Bharat-first interface with voice, Hinglish, and no sign-up wall at the front.',
 ]
-
-function ChevronRight() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-    </svg>
-  )
-}
-
-function CrossIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5 text-red-500">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-    </svg>
-  )
-}
-
-function ArrowDown() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-4 h-4 animate-bounce">
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-    </svg>
-  )
-}
-
-// ── Three.js Dark-Theme Particle Background ──────────────────────────────────
-function DarkParticles() {
-  const mountRef = useRef(null)
-
-  useEffect(() => {
-    if (!mountRef.current) return
-
-    const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true })
-    
-    renderer.setSize(window.innerWidth, window.innerHeight)
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    mountRef.current.appendChild(renderer.domElement)
-
-    const particlesGeometry = new THREE.BufferGeometry()
-    const particlesCount = 800
-    const posArray = new Float32Array(particlesCount * 3)
-    const colorsArray = new Float32Array(particlesCount * 3)
-    
-    const colorOptions = [
-      new THREE.Color('#4ade80'),
-      new THREE.Color('#fbbf24'),
-      new THREE.Color('#fcd34d'),
-      new THREE.Color('#ffffff'),
-    ]
-
-    for (let i = 0; i < particlesCount * 3; i += 3) {
-      posArray[i]     = (Math.random() - 0.5) * 15
-      posArray[i + 1] = (Math.random() - 0.5) * 15
-      posArray[i + 2] = (Math.random() - 0.5) * 10
-      const c = colorOptions[Math.floor(Math.random() * colorOptions.length)]
-      colorsArray[i] = c.r; colorsArray[i + 1] = c.g; colorsArray[i + 2] = c.b
-    }
-
-    particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3))
-    particlesGeometry.setAttribute('color',    new THREE.BufferAttribute(colorsArray, 3))
-
-    // Soft circular sprite
-    const cv = document.createElement('canvas'); cv.width = 16; cv.height = 16
-    const cx = cv.getContext('2d')
-    const gr = cx.createRadialGradient(8, 8, 0, 8, 8, 8)
-    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)')
-    cx.fillStyle = gr; cx.fillRect(0, 0, 16, 16)
-    const texture = new THREE.CanvasTexture(cv)
-
-    const particlesMaterial = new THREE.PointsMaterial({
-      size: 0.05, vertexColors: true, map: texture,
-      transparent: true, opacity: 0.6,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    })
-
-    const mesh = new THREE.Points(particlesGeometry, particlesMaterial)
-    scene.add(mesh)
-    camera.position.z = 3
-
-    let mouseX = 0, mouseY = 0
-    const halfW = window.innerWidth / 2, halfH = window.innerHeight / 2
-    const onMove = (e) => { mouseX = (e.clientX - halfW) * 0.0005; mouseY = (e.clientY - halfH) * 0.0005 }
-    document.addEventListener('mousemove', onMove)
-
-    const clock = new THREE.Clock()
-    let animId
-    const animate = () => {
-      animId = requestAnimationFrame(animate)
-      const t = clock.getElapsedTime()
-      mesh.rotation.y += 0.001; mesh.rotation.x += 0.0005
-      mesh.position.y = Math.sin(t * 0.5) * 0.1
-      camera.position.x += (mouseX - camera.position.x) * 0.05
-      camera.position.y += (-mouseY - camera.position.y) * 0.05
-      camera.lookAt(scene.position)
-      renderer.render(scene, camera)
-    }
-    animate()
-
-    const onResize = () => {
-      camera.aspect = window.innerWidth / window.innerHeight
-      camera.updateProjectionMatrix()
-      renderer.setSize(window.innerWidth, window.innerHeight)
-    }
-    window.addEventListener('resize', onResize)
-
-    return () => {
-      cancelAnimationFrame(animId)
-      window.removeEventListener('resize', onResize)
-      document.removeEventListener('mousemove', onMove)
-      if (mountRef.current && renderer.domElement.parentNode === mountRef.current) {
-        mountRef.current.removeChild(renderer.domElement)
-      }
-      particlesGeometry.dispose(); particlesMaterial.dispose(); texture.dispose(); renderer.dispose()
-    }
-  }, [])
-
-  return <div ref={mountRef} className="absolute inset-0 pointer-events-none z-0 overflow-hidden" style={{ mixBlendMode: 'screen' }} />
-}
-
-// ── Light-Theme Organic Background ───────────────────────────────────────────
-// Animated gradient blobs + floating leaf / petal SVG elements (pure CSS)
-const LIGHT_BG_STYLES = `
-  @keyframes blobA { 0%,100%{ transform:translate(0,0) scale(1) rotate(0deg); } 33%{ transform:translate(30px,-50px) scale(1.1) rotate(120deg); } 66%{ transform:translate(-20px,20px) scale(0.9) rotate(240deg); } }
-  @keyframes blobB { 0%,100%{ transform:translate(0,0) scale(1) rotate(0deg); } 33%{ transform:translate(-40px,30px) scale(1.15) rotate(-120deg); } 66%{ transform:translate(25px,-40px) scale(0.85) rotate(-240deg); } }
-  @keyframes blobC { 0%,100%{ transform:translate(0,0) scale(1); } 50%{ transform:translate(20px,30px) scale(1.08); } }
-  @keyframes leafFloat { 0%{ transform:translateY(0) rotate(0deg); opacity:0; } 10%{ opacity:1; } 90%{ opacity:1; } 100%{ transform:translateY(-100vh) rotate(360deg); opacity:0; } }
-  @keyframes petalSway { 0%,100%{ transform:translateX(0); } 50%{ transform:translateX(20px); } }
-`
-
-// Pre-generate leaf positions
-const LEAVES = Array.from({ length: 14 }, (_, i) => ({
-  left: `${(i * 17 + 7) % 100}%`,
-  delay: `${(i * 1.3) % 8}s`,
-  duration: `${10 + (i % 5) * 3}s`,
-  size: 12 + (i % 4) * 5,
-  color: ['#22c55e', '#16a34a', '#15803d', '#86efac', '#4ade80', '#f59e0b', '#fbbf24'][i % 7],
-  rotation: (i * 37) % 360,
-  swayDur: `${3 + (i % 3) * 2}s`,
-  swayDelay: `${(i * 0.7) % 4}s`,
-}))
-
-function LightOrganicBg() {
-  return (
-    <div className="absolute inset-0 pointer-events-none z-0 overflow-hidden">
-      <style>{LIGHT_BG_STYLES}</style>
-
-      {/* Gradient blobs */}
-      <div className="absolute w-[500px] h-[500px] rounded-full blur-[100px] opacity-40"
-           style={{ top: '5%', right: '10%', background: 'radial-gradient(circle, #bbf7d0 0%, #dcfce7 40%, transparent 70%)', animation: 'blobA 20s ease-in-out infinite' }} />
-      <div className="absolute w-[450px] h-[450px] rounded-full blur-[90px] opacity-35"
-           style={{ bottom: '10%', left: '5%', background: 'radial-gradient(circle, #fef3c7 0%, #fef9c3 40%, transparent 70%)', animation: 'blobB 25s ease-in-out infinite' }} />
-      <div className="absolute w-[350px] h-[350px] rounded-full blur-[80px] opacity-30"
-           style={{ top: '40%', left: '40%', background: 'radial-gradient(circle, #d9f99d 0%, #ecfccb 40%, transparent 70%)', animation: 'blobC 18s ease-in-out infinite' }} />
-
-      {/* Subtle grid pattern */}
-      <div className="absolute inset-0 opacity-[0.03]"
-           style={{ backgroundImage: 'radial-gradient(circle, #16a34a 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
-
-      {/* Floating leaf / petal SVGs */}
-      {LEAVES.map((leaf, i) => (
-        <div key={i} className="absolute bottom-[-40px]"
-             style={{
-               left: leaf.left,
-               animation: `leafFloat ${leaf.duration} linear ${leaf.delay} infinite, petalSway ${leaf.swayDur} ease-in-out ${leaf.swayDelay} infinite`,
-             }}>
-          <svg width={leaf.size} height={leaf.size} viewBox="0 0 24 24" fill={leaf.color} style={{ opacity: 0.35, transform: `rotate(${leaf.rotation}deg)` }}>
-            {i % 3 === 0 ? (
-              /* Leaf shape */
-              <path d="M17 8C8 10 5.9 16.17 3.82 19.82L5.71 21l1-1.73c.97.53 1.94.83 2.79.83 4 0 7-4 7-9 0-.9-.17-1.77-.5-2.56 2.3 1.93 3.7 4.8 3.7 7.96 0 2.42-.83 4.65-2.2 6.41L19 24c1.81-2.22 2.9-5.07 2.9-8.18C21.9 10.55 19.95 6.76 17 4V8z" />
-            ) : i % 3 === 1 ? (
-              /* Circle petal */
-              <circle cx="12" cy="12" r="8" />
-            ) : (
-              /* Small diamond */
-              <path d="M12 2L20 12L12 22L4 12Z" />
-            )}
-          </svg>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ── Theme-Aware Background Switcher ──────────────────────────────────────────
-function HeroBackground({ theme }) {
-  return theme === 'dark' ? <DarkParticles /> : <LightOrganicBg />
-}
 
 export default function Landing() {
   const lenisRef = useRef(null)
-  const { theme, toggle } = useTheme()
 
   const scrollTo = (id) => {
-    lenisRef.current?.scrollTo(document.querySelector(id), { offset: -72, duration: 1.4 })
+    lenisRef.current?.scrollTo(document.querySelector(id), { offset: -72, duration: 1.1 })
   }
 
   useEffect(() => {
-    const lenis = new Lenis({ duration: 1.2, easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)) })
+    const lenis = new Lenis({
+      duration: 1.05,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+    })
     lenisRef.current = lenis
     const rafFn = (time) => lenis.raf(time * 1000)
     gsap.ticker.add(rafFn)
@@ -328,68 +145,52 @@ export default function Landing() {
 
     const heroTl = gsap.timeline({ defaults: { ease: 'power3.out' } })
     heroTl
-      .fromTo('.ld-nav',    { y: -24, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7 }, 0)
-      .fromTo('.ld-badge',  { y: 12,  opacity: 0 }, { y: 0, opacity: 1, duration: 0.6 }, 0.35)
-      .fromTo('.ld-word',   { y: 52,  opacity: 0, rotationX: -90, transformOrigin: '0% 50% -50' }, { y: 0, opacity: 1, rotationX: 0, duration: 0.8, stagger: 0.08, ease: 'back.out(1.7)' }, 0.55)
-      .fromTo('.ld-sub',    { y: 20,  opacity: 0 }, { y: 0, opacity: 1, duration: 0.6 }, 0.95)
-      .fromTo('.ld-cta',    { y: 18,  opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, stagger: 0.1 }, 1.15)
-      .fromTo('.ld-card-a', { y: 60,  opacity: 0, scale: 0.9 }, { y: 0, opacity: 1, scale: 1, duration: 1, ease: 'elastic.out(1, 0.7)' }, 0.8)
-      .fromTo('.ld-card-b', { y: 40,  opacity: 0, x: 30, rotation: 5 }, { y: 0, opacity: 1, x: 0, rotation: 0, duration: 0.8, ease: 'back.out(1.5)' }, 1.0)
-      .fromTo('.ld-card-c', { y: 40,  opacity: 0, x: -30, rotation: -5 }, { y: 0, opacity: 1, x: 0, rotation: 0, duration: 0.8, ease: 'back.out(1.5)' }, 1.1)
+      .from('.ld-nav', { y: -30, autoAlpha: 0, duration: 0.6 })
+      .from('.ld-hero-copy > *', { y: 30, autoAlpha: 0, duration: 0.6, stagger: 0.08 }, '-=0.22')
+      .from('.ld-hero-visual', { y: 34, autoAlpha: 0, scale: 0.985, duration: 0.72 }, '-=0.42')
 
-    document.querySelectorAll('[data-count]').forEach((el) => {
-      const target = parseFloat(el.dataset.count)
-      const obj = { val: 0 }
-      gsap.to(obj, {
-        val: target, duration: 2.5, ease: 'power3.out',
-        onUpdate() { el.textContent = target % 1 === 0 ? Math.round(obj.val) : obj.val.toFixed(1) },
-        scrollTrigger: { trigger: el, start: 'top 88%', once: true },
-      })
+    gsap.fromTo('.ld-hero-image', { scale: 1.12 }, {
+      scale: 1,
+      ease: 'none',
+      scrollTrigger: {
+        trigger: '.ld-hero',
+        start: 'top top',
+        end: 'bottom top',
+        scrub: true,
+      },
+    })
+
+    gsap.fromTo('.ld-value-meter', { scaleX: 0.18 }, {
+      scaleX: 1,
+      transformOrigin: 'left center',
+      ease: 'none',
+      scrollTrigger: {
+        trigger: '.ld-value-section',
+        start: 'top 72%',
+        end: 'bottom 38%',
+        scrub: true,
+      },
     })
 
     gsap.utils.toArray('.ld-reveal').forEach((el) => {
-      gsap.fromTo(el,
-        { y: 50, opacity: 0 },
-        { y: 0, opacity: 1, duration: 0.8, ease: 'power3.out',
-          scrollTrigger: { trigger: el, start: 'top 86%', once: true } }
-      )
+      gsap.from(el, {
+        y: 34,
+        autoAlpha: 0,
+        duration: 0.72,
+        ease: 'power2.out',
+        scrollTrigger: { trigger: el, start: 'top 84%', once: true },
+      })
     })
 
-    gsap.utils.toArray('.ld-stagger').forEach((parent) => {
-      gsap.fromTo(parent.querySelectorAll(':scope > *'),
-        { y: 40, opacity: 0, scale: 0.95 },
-        { y: 0, opacity: 1, scale: 1, duration: 0.7, stagger: 0.1, ease: 'power3.out',
-          scrollTrigger: { trigger: parent, start: 'top 82%', once: true } }
-      )
+    gsap.utils.toArray('.ld-rhythm-strip').forEach((el, index) => {
+      gsap.from(el, {
+        x: index % 2 === 0 ? -34 : 34,
+        autoAlpha: 0,
+        duration: 0.76,
+        ease: 'power2.out',
+        scrollTrigger: { trigger: el, start: 'top 82%', once: true },
+      })
     })
-
-    document.querySelectorAll('.ld-step').forEach((el, i) => {
-      gsap.fromTo(el,
-        { x: i % 2 === 0 ? -60 : 60, opacity: 0 },
-        { x: 0, opacity: 1, duration: 0.9, ease: 'power3.out',
-          scrollTrigger: { trigger: el, start: 'top 85%', once: true } }
-      )
-      
-      // Add a subtle line drawing effect if there's a connector
-      if (i > 0) {
-        gsap.fromTo(`.ld-step-connector-${i}`, 
-          { scaleY: 0, transformOrigin: 'top' },
-          { scaleY: 1, duration: 0.8, ease: 'power2.inOut', scrollTrigger: { trigger: el, start: 'top 90%', once: true } }
-        )
-      }
-    })
-
-    ScrollTrigger.create({
-      start: 'top -60',
-      onEnter:     () => gsap.to('.ld-nav', { backgroundColor: 'var(--bg-nav)', backdropFilter: 'blur(20px)', boxShadow: 'var(--shadow-nav)', duration: 0.4 }),
-      onLeaveBack: () => gsap.to('.ld-nav', { backgroundColor: 'transparent', backdropFilter: 'blur(0px)', boxShadow: 'none', duration: 0.4 }),
-    })
-
-    gsap.fromTo('.ld-cta-section',
-      { scale: 0.95, opacity: 0, y: 30 },
-      { scale: 1, opacity: 1, y: 0, duration: 1, ease: 'elastic.out(1, 0.8)',
-        scrollTrigger: { trigger: '.ld-cta-section', start: 'top 85%', once: true } }
-    )
 
     return () => {
       heroTl.kill()
@@ -401,336 +202,189 @@ export default function Landing() {
   }, [])
 
   return (
-    <div className="font-sans antialiased overflow-x-hidden transition-colors duration-300">
-      
-      {/* NAV */}
-      <nav className="ld-nav fixed top-0 inset-x-0 z-50 transition-all duration-300 border-b border-transparent">
-        <div className="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white transition-all duration-300 group-hover:scale-110 group-hover:rotate-3"
-                 style={{ background: 'linear-gradient(135deg, #22c55e 0%, #15803d 100%)', boxShadow: '0 2px 12px rgba(34,197,94,0.4)' }}>
-              <LeafIcon />
+    <div className="overflow-x-hidden bg-transparent text-[var(--mist-100)]">
+      <nav className="ld-nav fixed inset-x-0 top-0 z-50 border-b border-white/10 bg-[rgba(14,12,9,0.72)] backdrop-blur-xl">
+        <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 md:px-6">
+          <Link to="/" className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,var(--leaf-400),var(--leaf-600))] text-white shadow-[0_14px_34px_rgba(79,111,44,0.28)]">
+              <LeafIcon className="h-5 w-5" />
             </div>
-            <span className="font-display font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>
-              KrishiDoot<span className="text-green-500">.AI</span>
-            </span>
+            <div>
+              <p className="font-display text-lg font-semibold tracking-tight">KrishiDoot<span className="text-[var(--leaf-300)]">.AI</span></p>
+              <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--mist-500)]">Field to mandi system</p>
+            </div>
           </Link>
-
-          <div className="hidden md:flex items-center gap-8 text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-            <button onClick={() => scrollTo('#how-it-works')} className="hover:text-green-500 transition-colors">How it works</button>
-            <button onClick={() => scrollTo('#features')}    className="hover:text-green-500 transition-colors">Features</button>
-            <button onClick={() => scrollTo('#technology')}  className="hover:text-green-500 transition-colors">Technology</button>
+          <div className="hidden items-center gap-6 text-sm text-[var(--mist-400)] md:flex">
+            <button onClick={() => scrollTo('#leaks')} className="transition hover:text-[var(--mist-100)]">Why value leaks</button>
+            <button onClick={() => scrollTo('#system')} className="transition hover:text-[var(--mist-100)]">How it works</button>
+            <button onClick={() => scrollTo('#trust')} className="transition hover:text-[var(--mist-100)]">Why trust it</button>
           </div>
-
-          <div className="flex items-center gap-3">
-            <ThemeToggle theme={theme} toggle={toggle} />
-            <div className="relative group">
-              <button className="kd-btn-primary text-white text-sm font-bold px-5 py-2.5 rounded-xl flex items-center gap-2">
-                Open App
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-3.5 h-3.5 group-hover:rotate-180 transition-transform duration-200">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                </svg>
-              </button>
-              {/* Dropdown */}
-              <div className="absolute right-0 top-full mt-2 w-52 rounded-xl overflow-hidden opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 translate-y-2 group-hover:translate-y-0 z-50"
-                   style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', boxShadow: '0 12px 40px rgba(0,0,0,0.25)' }}>
-                {[
-                  { to: '/grade',     icon: '📸', label: 'Grade Crop',    hindi: 'श्रेणी',  color: '#22c55e' },
-                  { to: '/negotiate', icon: '🤝', label: 'Negotiate',     hindi: 'सौदा',    color: '#f59e0b' },
-                  { to: '/market',    icon: '📊', label: 'Mandi Prices',  hindi: 'भाव',     color: '#3b82f6' },
-                  { to: '/grow',      icon: '🌱', label: 'Crop Journey',  hindi: 'उगाओ',    color: '#10b981' },
-                ].map(item => (
-                  <Link key={item.to} to={item.to}
-                        className="flex items-center gap-3 px-4 py-3 text-sm font-semibold transition-colors hover:bg-green-500/10"
-                        style={{ color: 'var(--text-primary)', borderBottom: '1px solid var(--border-subtle)' }}>
-                    <span className="text-lg">{item.icon}</span>
-                    <div className="flex-1">
-                      <span>{item.label}</span>
-                      <span className="text-[9px] font-hindi ml-2 opacity-50">{item.hindi}</span>
-                    </div>
-                    <span className="w-2 h-2 rounded-full" style={{ background: item.color }} />
-                  </Link>
-                ))}
-              </div>
-            </div>
-          </div>
+          <Link to="/grade" className="rounded-full border border-[rgba(124,175,77,0.24)] bg-[rgba(124,175,77,0.12)] px-4 py-2 text-sm font-medium text-[var(--leaf-300)] transition hover:bg-[rgba(124,175,77,0.18)]">
+            Open app
+          </Link>
         </div>
       </nav>
 
-      {/* HERO */}
-      <section className="min-h-screen flex items-center pt-16 relative overflow-hidden">
-        {/* Background grain and theme-aware effects */}
-        <div className="absolute inset-0 grain-overlay z-0 mix-blend-overlay"></div>
-        <HeroBackground theme={theme} />
-        
-        {/* Glow accents */}
-        <div className="absolute top-1/4 right-1/4 w-[500px] h-[500px] rounded-full blur-[100px] opacity-30 pointer-events-none z-0"
-             style={{ background: 'radial-gradient(circle, rgba(34,197,94,0.6) 0%, transparent 70%)' }} />
-        <div className="absolute bottom-0 left-1/4 w-[400px] h-[400px] rounded-full blur-[80px] opacity-20 pointer-events-none z-0"
-             style={{ background: 'radial-gradient(circle, rgba(245,158,11,0.5) 0%, transparent 70%)' }} />
+      <section className="ld-hero relative min-h-screen overflow-hidden pt-16">
+        <div
+          className="ld-hero-image absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: 'url(https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=1800&q=80&auto=format&fit=crop)' }}
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(96deg,rgba(12,11,8,0.94)_0%,rgba(12,11,8,0.68)_47%,rgba(12,11,8,0.88)_100%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(201,169,108,0.24),transparent_26%)]" />
 
-        <div className="max-w-6xl mx-auto px-5 py-24 w-full relative z-10">
-          <div className="grid lg:grid-cols-2 gap-14 items-center">
-            <div className="max-w-lg">
-              <div className="ld-badge inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full mb-8 font-display"
-                   style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.25)', color: '#22c55e' }}>
-                <span className="w-2 h-2 rounded-full animate-ping" style={{ background: '#22c55e', opacity: 0.8 }} />
-                <span className="text-xs font-bold tracking-wide">AI-powered negotiation for Indian farmers</span>
+        <div className="relative z-10 grid min-h-[calc(100vh-64px)] items-end px-4 pb-10 pt-10 md:px-6">
+          <div className="mx-auto grid w-full max-w-7xl gap-8 lg:grid-cols-[0.88fr_1.12fr] lg:items-end">
+            <div className="ld-hero-copy max-w-xl space-y-6 pb-4 lg:pb-10">
+              <StatusBadge tone="leaf">AI for the mandi, and the season before it</StatusBadge>
+              <div className="space-y-4">
+                <p className="text-[11px] uppercase tracking-[0.3em] text-[var(--millet-300)]">Built for farmers who sell into uncertainty</p>
+                <h1 className="font-display text-[clamp(3.25rem,7vw,6.3rem)] leading-[0.92] text-[var(--mist-100)]">
+                  Stop losing money in the gap between crop quality, market price, and timing.
+                </h1>
+                <p className="max-w-lg text-base leading-7 text-[var(--mist-300)] md:text-lg">
+                  KrishiDoot turns crop grading, mandi comparison, negotiation support, and weather-aware planning into one coherent operating system for the farmer.
+                </p>
               </div>
 
-              <h1 className="text-5xl sm:text-6xl font-black leading-[1.1] tracking-tight mb-2 font-display" style={{ color: 'var(--text-primary)' }}>
-                {['Stop', 'leaving', 'money'].map((w, i) => (
-                  <span key={i} className="ld-word inline-block" style={{ marginRight: '0.22em' }}>{w}</span>
-                ))}
-                <br />
-                {['at', 'the'].map((w, i) => (
-                  <span key={i} className="ld-word inline-block" style={{ marginRight: '0.22em' }}>{w}</span>
-                ))}
-                <span className="ld-word inline-block text-green-500 relative">
-                  mandi.
-                  <svg className="absolute -bottom-2 left-0 w-full" viewBox="0 0 100 20" preserveAspectRatio="none">
-                    <path d="M0,10 Q50,20 100,10" fill="none" stroke="#22c55e" strokeWidth="4" strokeLinecap="round" className="animate-pulse" />
-                  </svg>
-                </span>
-              </h1>
-
-              <p className="ld-sub text-lg leading-relaxed mt-8 mb-10" style={{ color: 'var(--text-secondary)' }}>
-                KrishiDoot uses real APMC data and a LangGraph AI agent to negotiate on your behalf —
-                so experienced traders can never lowball you again.
-              </p>
-
-              <div className="flex flex-wrap gap-3 mb-6">
-                <Link to="/grade" className="ld-cta kd-btn-primary text-white font-bold px-7 py-3.5 rounded-xl text-sm flex items-center gap-2 group">
-                  📸 Grade Crop
-                  <span className="group-hover:translate-x-1 transition-transform">→</span>
+              <div className="flex flex-wrap gap-3">
+                <Link to="/grade" className="flex items-center gap-2 rounded-full bg-[linear-gradient(135deg,var(--leaf-400),var(--leaf-600))] px-6 py-3 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(79,111,44,0.28)]">
+                  Start with crop grading
+                  <ArrowRightIcon className="h-4 w-4" />
                 </Link>
-                <Link to="/negotiate" className="ld-cta font-bold px-7 py-3.5 rounded-xl text-sm flex items-center gap-2 group transition-all duration-200"
-                      style={{ border: '2px solid var(--border-card)', color: 'var(--text-primary)', background: 'var(--bg-card)' }}>
-                  🤝 Negotiate
-                </Link>
-                <Link to="/market" className="ld-cta font-bold px-7 py-3.5 rounded-xl text-sm flex items-center gap-2 group transition-all duration-200"
-                      style={{ border: '2px solid var(--border-card)', color: 'var(--text-primary)', background: 'var(--bg-card)' }}>
-                  📊 Prices
-                </Link>
-                <Link to="/grow" className="ld-cta font-bold px-7 py-3.5 rounded-xl text-sm flex items-center gap-2 group transition-all duration-200"
-                      style={{ border: '2px solid var(--border-card)', color: 'var(--text-primary)', background: 'var(--bg-card)' }}>
-                  🌱 Grow
-                </Link>
+                <button onClick={() => scrollTo('#system')} className="rounded-full border border-white/10 bg-[rgba(255,255,255,0.05)] px-6 py-3 text-sm font-medium text-[var(--mist-200)] transition hover:bg-[rgba(255,255,255,0.09)]">
+                  See the workflow
+                </button>
               </div>
 
-              <p className="ld-cta text-sm font-medium flex items-center gap-2" style={{ color: 'var(--text-muted)' }}>
-                <span className="text-green-500">✓</span> No signup required
-                <span className="mx-2 opacity-50">·</span>
-                <span className="text-green-500">✓</span> Free to use
-              </p>
+              <div className="grid gap-3 sm:grid-cols-3">
+                {HERO_SIGNALS.map((item) => (
+                  <div key={item.label} className="border-t border-white/12 pt-4">
+                    <p className="font-display text-3xl text-[var(--mist-100)]">{item.value}</p>
+                    <p className="mt-1 text-xs leading-5 text-[var(--mist-400)]">{item.label}</p>
+                  </div>
+                ))}
+              </div>
             </div>
 
-            {/* Premium Hero product cards */}
-            <div className="relative flex justify-center lg:justify-end min-h-[400px]">
-              
-              {/* Main Price Card */}
-              <div className="ld-card-a relative z-20 kd-glass rounded-3xl p-6 w-80 mt-8 glow-green animate-float">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">🍅</span>
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-wider font-display" style={{ color: 'var(--text-muted)' }}>Tomato · Karnataka</p>
-                      <p className="text-[11px] font-medium mt-0.5" style={{ color: 'var(--text-faint)' }}>APMC Modal Price</p>
+            <div className="ld-hero-visual lg:pl-10">
+              <div className="relative overflow-hidden rounded-[34px] border border-white/10 bg-[rgba(14,12,9,0.38)] shadow-[0_30px_90px_rgba(0,0,0,0.34)]">
+                <img
+                  src="https://images.unsplash.com/photo-1464226184884-fa280b87c399?w=1600&q=80&auto=format&fit=crop"
+                  alt="Fresh produce on a grading table"
+                  className="h-[540px] w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(10,10,8,0.16)_0%,rgba(10,10,8,0.68)_100%)]" />
+                <div className="absolute inset-x-0 bottom-0 p-5 md:p-6">
+                  <div className="grid gap-4 md:grid-cols-[1.1fr_0.9fr]">
+                    <div className="rounded-[28px] border border-white/12 bg-[rgba(14,12,9,0.74)] p-5 backdrop-blur-md">
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--millet-300)]">Live farmer desk</p>
+                      <p className="mt-2 max-w-sm font-display text-3xl leading-tight text-[var(--mist-100)]">
+                        One surface where crop proof, market route, and ask price can finally talk to each other.
+                      </p>
                     </div>
-                  </div>
-                  <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold"
-                        style={{ background: 'rgba(34,197,94,0.15)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }}>
-                    <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-ping" />
-                    LIVE
-                  </span>
-                </div>
-                
-                <div className="flex items-baseline gap-1 mt-2">
-                  <span className="text-2xl font-bold opacity-60" style={{ color: 'var(--text-primary)' }}>₹</span>
-                  <p className="text-5xl font-black tracking-tight font-display" style={{ color: 'var(--text-primary)' }}>
-                    28.50
-                  </p>
-                  <span className="text-sm font-medium ml-1" style={{ color: 'var(--text-muted)' }}>/kg</span>
-                </div>
-                
-                <div className="mt-4 flex items-center gap-2">
-                  <span className="text-xs px-3 py-1.5 rounded-lg font-bold flex items-center gap-1"
-                        style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.2)' }}>
-                    <span className="text-[10px]">⚖️</span> Floor: ₹26.50/kg
-                  </span>
-                </div>
-                
-                <div className="mt-6 pt-5 flex items-center gap-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 relative"
-                       style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)' }}>
-                    <div className="w-4 h-4 rounded-full bg-green-500 glow-pulse" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>AI negotiating</p>
-                    <p className="text-xs font-medium mt-0.5" style={{ color: 'var(--text-muted)' }}>Round 2 of 5 · Boulware</p>
-                  </div>
-                </div>
-              </div>
 
-              {/* Savings Card */}
-              <div className="ld-card-b absolute -bottom-6 -right-4 lg:-right-8 z-30 rounded-2xl p-5 w-48 animate-float"
-                   style={{ 
-                     background: 'linear-gradient(135deg, #16a34a 0%, #15803d 100%)',
-                     boxShadow: '0 20px 40px -10px rgba(22,163,74,0.5)',
-                     border: '1px solid rgba(74,222,128,0.4)',
-                     animationDelay: '1s'
-                   }}>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-lg">💰</span>
-                  <p className="text-xs font-bold text-green-100 uppercase tracking-wide">AI Saved You</p>
-                </div>
-                <p className="text-3xl font-black text-white tracking-tight font-display">₹4,200</p>
-                <p className="text-xs font-medium text-green-200 mt-2">200 kg wheat · this week</p>
-              </div>
-
-              {/* Grade Card */}
-              <div className="ld-card-c absolute -top-8 -left-6 lg:-left-12 z-30 kd-glass rounded-2xl p-4 animate-float"
-                   style={{ animationDelay: '2s' }}>
-                <p className="text-[10px] font-bold uppercase tracking-widest mb-2 font-display" style={{ color: 'var(--text-muted)' }}>Agmark Grade</p>
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl flex items-center justify-center"
-                       style={{ background: 'rgba(34,197,94,0.15)', border: '1px solid rgba(34,197,94,0.3)' }}>
-                    <span className="text-2xl font-black text-green-500 font-display">A</span>
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>Premium</p>
-                    <div className="flex items-center gap-1 mt-0.5">
-                      <span className="w-2 h-2 bg-green-500 rounded-full" />
-                      <p className="text-[11px] font-bold" style={{ color: 'var(--text-secondary)' }}>94% confidence</p>
+                    <div className="rounded-[28px] border border-[rgba(124,175,77,0.18)] bg-[rgba(12,11,8,0.82)] p-5 backdrop-blur-md">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--mist-500)]">Signal chain</p>
+                        <StatusBadge tone="leaf">Ready</StatusBadge>
+                      </div>
+                      <div className="mt-4 space-y-3">
+                        <div className="flex items-start justify-between gap-3 border-b border-white/8 pb-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.18em] text-[var(--mist-500)]">Grade confidence</p>
+                            <p className="mt-1 font-display text-3xl text-[var(--leaf-300)]">A</p>
+                          </div>
+                          <p className="max-w-[10rem] text-right text-xs leading-5 text-[var(--mist-400)]">Photo-backed evidence before the first buyer offer.</p>
+                        </div>
+                        <div className="flex items-start justify-between gap-3 border-b border-white/8 pb-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.18em] text-[var(--mist-500)]">Best route</p>
+                            <p className="mt-1 font-display text-3xl text-[var(--mist-100)]">Rs.28.50/kg</p>
+                          </div>
+                          <p className="max-w-[10rem] text-right text-xs leading-5 text-[var(--mist-400)]">Net value after freight, not the nearest default.</p>
+                        </div>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.18em] text-[var(--mist-500)]">Season rhythm</p>
+                            <p className="mt-1 font-display text-3xl text-[var(--millet-300)]">Weekly</p>
+                          </div>
+                          <p className="max-w-[10rem] text-right text-xs leading-5 text-[var(--mist-400)]">Weather, crop tasks, and subsidy watch in one line of sight.</p>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-              
             </div>
-          </div>
-
-          <div className="flex justify-center mt-24">
-            <button onClick={() => scrollTo('#stats')} className="flex flex-col items-center gap-3 transition-colors group" style={{ color: 'var(--text-muted)' }}>
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] group-hover:text-green-500 transition-colors">Scroll</span>
-              <div className="w-8 h-8 rounded-full border flex items-center justify-center group-hover:border-green-500 group-hover:text-green-500 transition-colors"
-                   style={{ borderColor: 'var(--border-subtle)' }}>
-                <ArrowDown />
-              </div>
-            </button>
           </div>
         </div>
       </section>
 
-      {/* STATS */}
-      <section id="stats" className="py-20 border-y" style={{ background: 'var(--bg-card-2)', borderColor: 'var(--border-subtle)' }}>
-        <div className="max-w-6xl mx-auto px-5">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 lg:gap-8">
-            {STATS.map((s, i) => (
-              <div key={i} className="text-center">
-                <div className="flex items-baseline justify-center gap-1 mb-2">
-                  <p className="text-5xl font-black tracking-tight font-display" style={{ color: 'var(--text-primary)' }}>
-                    <span data-count={s.value}>{s.value}</span>{s.suffix}
-                  </p>
+      <section id="leaks" className="ld-value-section border-y border-white/8 bg-[rgba(255,255,255,0.02)] py-24">
+        <div className="mx-auto grid max-w-7xl gap-12 px-4 md:px-6 lg:grid-cols-[0.88fr_1.12fr]">
+          <div className="space-y-5 lg:sticky lg:top-24 lg:self-start lg:pr-8">
+            <p className="text-[11px] uppercase tracking-[0.28em] text-[var(--millet-300)]">Why value leaks</p>
+            <h2 className="font-display text-[clamp(2.35rem,4vw,4.2rem)] leading-[0.95] text-[var(--mist-100)]">
+              The farmer is usually forced to combine four separate decisions with almost no shared visibility.
+            </h2>
+            <p className="max-w-md text-sm leading-7 text-[var(--mist-400)]">
+              Market information, grade evidence, weather advisories, and selling strategy exist, but they rarely arrive in one workflow that feels built for actual farm pressure.
+            </p>
+            <div className="rounded-full bg-white/8 p-1">
+              <div className="ld-value-meter h-2 rounded-full bg-[linear-gradient(90deg,var(--leaf-400),var(--millet-300))]" />
+            </div>
+          </div>
+
+          <div className="space-y-0">
+            {VALUE_LEAKS.map((item) => (
+              <article key={item.title} className="ld-reveal grid gap-4 border-t border-white/8 py-6 md:grid-cols-[110px_minmax(0,1fr)] md:gap-6">
+                <div className="space-y-2">
+                  <p className="font-display text-5xl leading-none text-[var(--mist-200)]/70">{item.index}</p>
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--millet-300)]">{item.kicker}</p>
                 </div>
-                <p className="text-sm font-bold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>{s.label}</p>
-                {/* Decorative underline */}
-                <div className="w-12 h-1 bg-green-500/50 mx-auto mt-4 rounded-full" />
-              </div>
+                <div>
+                  <p className="font-display text-3xl leading-tight text-[var(--mist-100)]">{item.title}</p>
+                  <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--mist-400)]">{item.body}</p>
+                </div>
+              </article>
             ))}
           </div>
         </div>
       </section>
 
-      {/* PROBLEM */}
-      <section className="py-32" style={{ background: 'var(--bg-base)' }}>
-        <div className="max-w-6xl mx-auto px-5">
-          <div className="grid lg:grid-cols-2 gap-20 items-center">
-            <div className="ld-reveal">
-              <p className="text-xs font-black text-red-500 uppercase tracking-[0.2em] mb-4 font-display">The Problem</p>
-              <h2 className="text-4xl sm:text-5xl font-black leading-[1.1] mb-6 font-display" style={{ color: 'var(--text-primary)' }}>
-                Farmers lose <span className="text-red-500">30–40%</span><br />of income at the mandi.
-              </h2>
-              <p className="text-lg leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                The system is fundamentally stacked against farmers. Traders have real-time data,
-                negotiation experience, and market leverage. Farmers walk in with none of that.
-              </p>
-              <Link to="/negotiate" className="inline-flex items-center gap-2 mt-8 font-bold text-green-600 hover:text-green-500 text-lg group transition-colors">
-                See how we fix this <span className="group-hover:translate-x-1 transition-transform">→</span>
-              </Link>
-            </div>
-
-            <div className="ld-stagger grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {PAIN_POINTS.map((p, i) => (
-                <div key={i} className="kd-card p-6 group hover:-translate-y-1 transition-transform duration-300">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4 transition-colors"
-                       style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)' }}>
-                    <CrossIcon />
-                  </div>
-                  <p className="font-bold text-base mb-2 font-display" style={{ color: 'var(--text-primary)' }}>{p.title}</p>
-                  <p className="text-sm leading-relaxed" style={{ color: 'var(--text-muted)' }}>{p.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* HOW IT WORKS */}
-      <section id="how-it-works" className="py-32 relative overflow-hidden" style={{ background: 'var(--bg-card-2)' }}>
-        {/* Background decorative elements */}
-        <div className="absolute top-0 right-0 w-1/2 h-full opacity-10 pointer-events-none"
-             style={{ background: 'radial-gradient(circle at top right, #22c55e, transparent 70%)' }}></div>
-        
-        <div className="max-w-4xl mx-auto px-5 relative z-10">
-          <div className="ld-reveal text-center mb-20">
-            <p className="text-xs font-black text-green-500 uppercase tracking-[0.2em] mb-4 font-display">How It Works</p>
-            <h2 className="text-4xl sm:text-5xl font-black leading-[1.1] font-display" style={{ color: 'var(--text-primary)' }}>
-              Three steps to a fair price.
+      <section id="system" className="py-24">
+        <div className="mx-auto max-w-7xl px-4 md:px-6">
+          <div className="ld-reveal mb-12 max-w-2xl space-y-3">
+            <p className="text-[11px] uppercase tracking-[0.28em] text-[var(--millet-300)]">Operating rhythm</p>
+            <h2 className="font-display text-[clamp(2.3rem,4vw,4.1rem)] leading-[0.96] text-[var(--mist-100)]">
+              A cleaner field-to-sale sequence, instead of four tools pretending they are not connected.
             </h2>
-            <p className="text-lg mt-6" style={{ color: 'var(--text-secondary)' }}>From photo to final price in under five minutes.</p>
+            <p className="text-sm leading-7 text-[var(--mist-400)]">
+              Each step has one job. Together they form a stronger farmer workflow that starts from the lot, not from admin overhead.
+            </p>
           </div>
-          
-          <div className="space-y-12 relative">
-            {/* Vertical connector line */}
-            <div className="absolute left-8 sm:left-14 top-10 bottom-10 w-1 rounded-full hidden sm:block"
-                 style={{ background: 'var(--border-subtle)' }}></div>
-            
-            {STEPS.map((step, i) => (
-              <div key={i} className="ld-step relative flex flex-col sm:flex-row gap-6 sm:gap-10 items-start group">
-                
-                {/* Active connecting line (animated via GSAP) */}
-                {i > 0 && (
-                  <div className={`ld-step-connector-${i} absolute left-8 sm:left-14 top-[-48px] h-12 w-1 bg-green-500 hidden sm:block origin-top`} />
-                )}
 
-                <div className="relative z-10 flex-shrink-0 w-16 sm:w-28 flex justify-center">
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center font-display text-2xl font-black shadow-lg transition-transform duration-300 group-hover:scale-110"
-                       style={{ background: 'linear-gradient(135deg, #22c55e, #15803d)', color: 'white' }}>
-                    {step.number}
-                  </div>
+          <div className="space-y-8">
+            {RHYTHM.map(({ eyebrow, title, body, to, cta, Icon, image }) => (
+              <div key={title} className="ld-rhythm-strip grid gap-4 rounded-[32px] border border-white/10 bg-[rgba(255,255,255,0.03)] p-4 md:grid-cols-[0.94fr_1.06fr] md:p-5">
+                <div className="overflow-hidden rounded-[26px]">
+                  <img src={image} alt={title} className="h-full min-h-[280px] w-full object-cover" />
                 </div>
-                
-                <div className="flex-1 kd-card p-6 sm:p-8 relative overflow-hidden">
-                  {/* Subtle card glow on hover */}
-                  <div className="absolute inset-0 bg-green-500 opacity-0 group-hover:opacity-5 transition-opacity duration-300" />
-                  
-                  <div className="flex flex-wrap items-center gap-3 mb-3 relative z-10">
-                    <h3 className="text-xl sm:text-2xl font-black font-display" style={{ color: 'var(--text-primary)' }}>{step.title}</h3>
-                    <span className="text-xs px-2.5 py-1 rounded-md font-mono font-bold"
-                          style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.2)' }}>
-                      {step.badge}
-                    </span>
+                <div className="flex flex-col justify-between gap-5 rounded-[26px] border border-white/8 bg-[rgba(13,12,9,0.56)] p-6">
+                  <div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-11 w-11 items-center justify-center rounded-[18px] border border-white/10 bg-white/5 text-[var(--leaf-300)]">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--millet-300)]">{eyebrow}</p>
+                    </div>
+                    <p className="mt-5 max-w-xl font-display text-4xl leading-tight text-[var(--mist-100)]">{title}</p>
+                    <p className="mt-4 max-w-xl text-sm leading-7 text-[var(--mist-400)]">{body}</p>
                   </div>
-                  <p className="text-base leading-relaxed mb-6 relative z-10" style={{ color: 'var(--text-muted)' }}>{step.desc}</p>
-                  
-                  <Link to={step.to} className="inline-flex items-center gap-2 font-bold text-sm transition-colors relative z-10"
-                        style={{ color: 'var(--text-primary)' }}>
-                    <span className="group-hover:text-green-500 transition-colors">{step.cta}</span>
-                    <span className="w-8 h-8 rounded-full flex items-center justify-center transition-colors group-hover:bg-green-500 group-hover:text-white group-hover:border-transparent"
-                          style={{ border: '1px solid var(--border-subtle)' }}>
-                      <ChevronRight />
-                    </span>
+                  <Link to={to} className="inline-flex items-center gap-2 text-sm font-medium text-[var(--leaf-300)]">
+                    {cta}
+                    <ArrowRightIcon className="h-4 w-4" />
                   </Link>
                 </div>
               </div>
@@ -739,186 +393,103 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* FARMER PHOTO STRIP */}
-      <section className="py-24 border-y" style={{ background: 'var(--bg-base)', borderColor: 'var(--border-subtle)' }}>
-        <div className="max-w-6xl mx-auto px-5">
-          <div className="ld-reveal text-center mb-16">
-            <p className="text-xs font-black text-amber-500 uppercase tracking-[0.2em] mb-4 font-display">Real farmers, real results</p>
-            <h2 className="text-3xl sm:text-4xl font-black font-display" style={{ color: 'var(--text-primary)' }}>Extra income from every harvest.</h2>
-          </div>
-          <div className="ld-stagger grid grid-cols-1 sm:grid-cols-3 gap-8">
-            {FARMER_PHOTOS.map((f, i) => (
-              <div key={i} className="kd-card overflow-hidden group p-0 border-0">
-                <div className="h-56 overflow-hidden relative">
-                  <img
-                    src={`https://images.unsplash.com/${f.id}?w=600&q=80&auto=format&fit=crop`}
-                    alt={`Farmer ${f.name}`}
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
-                  />
-                  {/* Rich gradient overlay */}
-                  <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(10,15,11,0.9) 0%, transparent 100%)' }} />
-                  
-                  {/* Gain badge */}
-                  <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
-                    <div>
-                      <p className="font-bold text-white text-lg">{f.name}</p>
-                      <p className="text-xs font-medium text-gray-300 mt-0.5">{f.crop} farmer · {f.state}</p>
-                    </div>
-                    <div className="px-3 py-1.5 rounded-lg font-black text-sm"
-                         style={{ background: 'rgba(245,158,11,0.9)', color: '#fff', boxShadow: '0 4px 12px rgba(245,158,11,0.4)' }}>
-                      +{f.gain}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* FEATURES SWIPER */}
-      <section id="features" className="py-32 overflow-hidden relative" style={{ background: 'var(--bg-card-2)' }}>
-        <div className="max-w-6xl mx-auto px-5 mb-16">
-          <div className="ld-reveal">
-            <p className="text-xs font-black text-green-500 uppercase tracking-[0.2em] mb-4 font-display">Features</p>
-            <h2 className="text-4xl sm:text-5xl font-black leading-[1.1] font-display" style={{ color: 'var(--text-primary)' }}>
-              Everything a farmer needs<br className="hidden sm:block" /> to win at the mandi.
+      <section className="border-y border-white/8 bg-[rgba(255,255,255,0.02)] py-24">
+        <div className="mx-auto max-w-7xl px-4 md:px-6">
+          <div className="ld-reveal mb-10 max-w-2xl space-y-3">
+            <p className="text-[11px] uppercase tracking-[0.28em] text-[var(--millet-300)]">Useful in the field</p>
+            <h2 className="font-display text-[clamp(2.2rem,4vw,3.8rem)] leading-[0.97] text-[var(--mist-100)]">
+              Practical support that respects Bharat conditions, not just desktop demos.
             </h2>
+            <p className="text-sm leading-7 text-[var(--mist-400)]">
+              The interface should help when connectivity is uneven, time is short, and the farmer wants action faster than explanation.
+            </p>
           </div>
-        </div>
-        
-        <div className="pl-5 md:pl-[max(1.25rem,calc((100vw-72rem)/2+1.25rem))]">
+
           <Swiper
             modules={[Autoplay, Pagination]}
-            spaceBetween={20}
-            slidesPerView={1.1}
-            breakpoints={{
-              540:  { slidesPerView: 1.8 },
-              768:  { slidesPerView: 2.4 },
-              1024: { slidesPerView: 3.2 },
-            }}
-            autoplay={{ delay: 4000, disableOnInteraction: false, pauseOnMouseEnter: true }}
+            spaceBetween={18}
+            slidesPerView={1.05}
+            breakpoints={{ 760: { slidesPerView: 2.05 }, 1120: { slidesPerView: 4 } }}
+            autoplay={{ delay: 3400, disableOnInteraction: false, pauseOnMouseEnter: true }}
             pagination={{ clickable: true }}
             loop
-            style={{ paddingBottom: '60px' }}
+            style={{ paddingBottom: '48px' }}
           >
-            {FEATURES.map((f, i) => (
-              <SwiperSlide key={i} style={{ height: 'auto' }}>
-                <div className="kd-card h-full flex flex-col p-8 group">
-                  <div className="flex items-start justify-between mb-8">
-                    <div className="w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 transition-transform duration-300 group-hover:scale-110"
-                         style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e' }}>
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-7 h-7">
-                        {f.paths.map((d, di) => (
-                          <path key={di} strokeLinecap="round" strokeLinejoin="round" d={d} />
-                        ))}
-                      </svg>
+            {CAPABILITIES.map(({ title, body, Icon, tone }) => (
+              <SwiperSlide key={title} style={{ height: 'auto' }}>
+                <SurfaceCard className="ld-reveal h-full p-5">
+                  <div className="flex h-full flex-col justify-between gap-10">
+                    <div>
+                      <StatusBadge tone={tone}>{title}</StatusBadge>
+                      <div className="mt-5 flex h-12 w-12 items-center justify-center rounded-[20px] border border-white/10 bg-white/5 text-[var(--mist-100)]">
+                        <Icon className="h-5 w-5" />
+                      </div>
                     </div>
-                    <span className="text-[10px] font-mono font-bold px-2.5 py-1 rounded-md tracking-wide"
-                          style={{ background: 'var(--bg-base)', color: 'var(--text-muted)', border: '1px solid var(--border-subtle)' }}>
-                      {f.tag}
-                    </span>
+                    <div>
+                      <p className="font-display text-3xl leading-tight text-[var(--mist-100)]">{title}</p>
+                      <p className="mt-3 text-sm leading-7 text-[var(--mist-400)]">{body}</p>
+                    </div>
                   </div>
-                  <h3 className="font-black text-xl mb-3 font-display" style={{ color: 'var(--text-primary)' }}>{f.title}</h3>
-                  <p className="text-sm leading-relaxed flex-1" style={{ color: 'var(--text-secondary)' }}>{f.desc}</p>
-                </div>
+                </SurfaceCard>
               </SwiperSlide>
             ))}
           </Swiper>
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-20 px-5" style={{ background: 'var(--bg-base)' }}>
-        <div className="ld-cta-section max-w-5xl mx-auto rounded-[2rem] px-8 py-20 sm:px-16 text-center overflow-hidden relative"
-             style={{ 
-               background: 'linear-gradient(135deg, #166534 0%, #14532d 100%)',
-               boxShadow: '0 20px 40px rgba(22,163,74,0.3)',
-               border: '1px solid rgba(74,222,128,0.3)'
-             }}>
-          
-          {/* Decorative shapes */}
-          <div className="absolute -top-24 -right-24 w-80 h-80 bg-green-400 rounded-full mix-blend-overlay blur-3xl opacity-30 pointer-events-none" />
-          <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-amber-400 rounded-full mix-blend-overlay blur-3xl opacity-20 pointer-events-none" />
-          
-          <div className="relative z-10">
-            <p className="text-green-300 text-sm font-black uppercase tracking-[0.2em] mb-6 font-display">Get started today</p>
-            <h2 className="text-4xl sm:text-5xl font-black text-white leading-[1.1] mb-6 font-display">
-              Your next mandi deal<br />should be a fair one.
+      <section id="trust" className="py-24">
+        <div className="mx-auto grid max-w-7xl gap-10 px-4 md:px-6 lg:grid-cols-[0.92fr_1.08fr]">
+          <div className="ld-reveal space-y-5 lg:pr-10">
+            <p className="text-[11px] uppercase tracking-[0.28em] text-[var(--millet-300)]">Why trust it</p>
+            <h2 className="font-display text-[clamp(2.25rem,4vw,4rem)] leading-[0.96] text-[var(--mist-100)]">
+              The goal is not just a nicer interface. It is a clearer farmer decision surface.
             </h2>
-            <p className="text-green-100/90 text-lg leading-relaxed mb-10 max-w-2xl mx-auto">
-              KrishiDoot.AI is free, requires no sign-up, and works on any phone. Start with a single crop photo.
+            <p className="max-w-md text-sm leading-7 text-[var(--mist-400)]">
+              KrishiDoot is strongest when it feels grounded in how farmers actually work: crop in hand, mandi uncertainty, weather pressure, and seasonal memory all at once.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Link to="/grade" className="bg-white text-green-800 font-black px-10 py-4 rounded-xl hover:bg-green-50 active:scale-95 transition-all duration-200 text-base shadow-xl flex items-center justify-center gap-2">
-                <span className="text-xl">📸</span> Grade my crop
-              </Link>
-              <Link to="/market" className="kd-glass text-white font-bold px-10 py-4 rounded-xl hover:bg-white/10 active:scale-95 transition-all duration-200 text-base flex items-center justify-center gap-2">
-                <span className="text-xl">📊</span> Check mandi prices
-              </Link>
-            </div>
-            <p className="text-green-300/70 text-sm mt-8 font-medium">Works on any phone · No app store · 100% free</p>
+            <SurfaceCard className="grain-surface overflow-hidden p-5">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-[18px] border border-white/10 bg-white/5 text-[var(--leaf-300)]">
+                  <TimelineIcon className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--mist-500)]">Design principle</p>
+                  <p className="mt-1 font-display text-3xl text-[var(--mist-100)]">One chain of decisions, not four disconnected screens.</p>
+                </div>
+              </div>
+            </SurfaceCard>
+          </div>
+
+          <div className="space-y-0">
+            {SOURCE_LINES.map((line, index) => (
+              <div key={line} className="ld-reveal grid gap-4 border-t border-white/8 py-5 md:grid-cols-[90px_minmax(0,1fr)] md:gap-6">
+                <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--mist-500)]">Signal {String(index + 1).padStart(2, '0')}</p>
+                <p className="font-display text-[1.9rem] leading-tight text-[var(--mist-100)]">{line}</p>
+              </div>
+            ))}
           </div>
         </div>
       </section>
 
-      {/* FOOTER */}
-      <footer className="py-16 border-t mt-10" style={{ background: 'var(--bg-card)', borderColor: 'var(--border-subtle)' }}>
-        <div className="max-w-6xl mx-auto px-5">
-          <div className="flex flex-col md:flex-row justify-between gap-12 mb-12">
-            <div className="max-w-sm">
-              <div className="flex items-center gap-2.5 mb-4">
-                <div className="w-8 h-8 rounded-xl flex items-center justify-center text-white"
-                     style={{ background: 'linear-gradient(135deg, #22c55e 0%, #15803d 100%)' }}>
-                  <LeafIcon className="w-4 h-4" />
-                </div>
-                <span className="font-display font-black text-lg tracking-tight" style={{ color: 'var(--text-primary)' }}>
-                  KrishiDoot<span className="text-green-500">.AI</span>
-                </span>
-              </div>
-              <p className="text-sm leading-relaxed mb-6" style={{ color: 'var(--text-secondary)' }}>
-                AI-powered negotiation for Indian farmers. Get the price you deserve at every mandi.
+      <section id="cta" className="pb-20">
+        <div className="mx-auto max-w-5xl px-4 md:px-6">
+          <SurfaceCard className="grain-surface overflow-hidden px-6 py-12 text-center md:px-12">
+            <div className="mx-auto max-w-2xl space-y-5">
+              <StatusBadge tone="leaf">No sign-up wall</StatusBadge>
+              <h2 className="font-display text-[clamp(2.4rem,4vw,4.25rem)] leading-[0.95] text-[var(--mist-100)]">
+                Start from the crop lot in front of you, and let the rest of the workflow stay coherent.
+              </h2>
+              <p className="text-sm leading-7 text-[var(--mist-400)] md:text-base">
+                Grade the harvest, compare the right mandi, negotiate with a floor, and keep the season readable before the next sale cycle starts again.
               </p>
-              {/* Decorative crops */}
-              <div className="flex gap-3 text-xl opacity-80">
-                <span>🌾</span><span>🍅</span><span>🧅</span><span>🥔</span>
+              <div className="flex flex-wrap justify-center gap-3 pt-2">
+                <Link to="/grade" className="rounded-full bg-[linear-gradient(135deg,var(--leaf-400),var(--leaf-600))] px-6 py-3 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(79,111,44,0.28)]">Grade the crop</Link>
+                <Link to="/grow" className="rounded-full border border-white/10 bg-white/5 px-6 py-3 text-sm font-medium text-[var(--mist-200)]">Open crop journey</Link>
               </div>
             </div>
-            
-            <div className="flex gap-16 md:gap-24">
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest mb-5 font-display" style={{ color: 'var(--text-muted)' }}>App</p>
-                <div className="space-y-4">
-                  {[
-                    { to: '/grade',     label: 'Grade Crop'   },
-                    { to: '/market',    label: 'Mandi Prices' },
-                    { to: '/negotiate', label: 'Negotiate'    },
-                    { to: '/grow',      label: 'Crop Journey' },
-                  ].map(({ to, label }) => (
-                    <Link key={to} to={to} className="block text-sm font-medium hover:text-green-500 transition-colors" style={{ color: 'var(--text-primary)' }}>
-                      {label}
-                    </Link>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="text-xs font-black uppercase tracking-widest mb-5 font-display" style={{ color: 'var(--text-muted)' }}>Technology</p>
-                <div className="space-y-4">
-                  {['Gemini Vision', 'LangGraph', 'APMC API', 'React & Three.js'].map((t) => (
-                    <p key={t} className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>{t}</p>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          <div className="pt-8 border-t flex flex-col sm:flex-row justify-between gap-4" style={{ borderColor: 'var(--border-subtle)' }}>
-            <p className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>© 2026 KrishiDoot.AI. Built for Indian farmers.</p>
-            <p className="text-sm font-medium" style={{ color: 'var(--text-muted)' }}>DPDP Act 2023 compliant · data.gov.in APMC data</p>
-          </div>
+          </SurfaceCard>
         </div>
-      </footer>
-
+      </section>
     </div>
   )
 }

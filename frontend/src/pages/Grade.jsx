@@ -1,376 +1,336 @@
-import { useState, useRef, useEffect } from 'react'
-import { gsap } from 'gsap'
-import { Link } from 'react-router-dom'
-import { LeafIcon, AlertIcon, SpinnerIcon, ErrorAlert, INPUT_CLS, SELECT_CLS, KD_CARD, triggerConfetti, CropBadge, PriceDisplay } from '../components/ui.jsx'
+﻿import { useState, useRef, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import gsap from 'gsap'
+import axios from 'axios'
+import {
+  ArrowRightIcon,
+  CameraIcon,
+  CheckIcon,
+  CropIcon,
+  ErrorAlert,
+  PageIntro,
+  ScaleIcon,
+  SpinnerIcon,
+  StatusBadge,
+  SurfaceCard,
+} from '../components/ui.jsx'
 
-// API base URL
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-// Visual metadata for grades
 const GRADE_META = {
   A: {
-    color: '#22c55e', bg: 'rgba(34,197,94,0.1)', border: 'rgba(34,197,94,0.3)',
-    label: 'Premium Quality', icon: '🌟',
-    confetti: true
+    label: 'Premium quality',
+    sublabel: 'Agmark Grade A',
+    text: 'text-emerald-300',
+    tone: 'leaf',
+    multiplier: '1.25x',
+    multiplierNote: '25% above market',
+    border: 'rgba(124,175,77,0.28)',
+    wash: 'rgba(124,175,77,0.12)',
   },
   B: {
-    color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.3)',
-    label: 'Standard Quality', icon: '👍',
-    confetti: false
+    label: 'Market standard',
+    sublabel: 'Agmark Grade B',
+    text: 'text-[var(--millet-300)]',
+    tone: 'millet',
+    multiplier: '1.15x',
+    multiplierNote: '15% above market',
+    border: 'rgba(209,174,108,0.28)',
+    wash: 'rgba(209,174,108,0.12)',
   },
   C: {
-    color: '#64748b', bg: 'rgba(100,116,139,0.1)', border: 'rgba(100,116,139,0.3)',
-    label: 'Fair Quality', icon: '⚠️',
-    confetti: false
-  }
+    label: 'Needs discounting',
+    sublabel: 'Agmark Grade C',
+    text: 'text-[var(--danger-300)]',
+    tone: 'danger',
+    multiplier: '1.05x',
+    multiplierNote: '5% above market',
+    border: 'rgba(194,93,70,0.28)',
+    wash: 'rgba(194,93,70,0.12)',
+  },
 }
 
 export default function Grade() {
-  const [file, setFile] = useState(null)
-  const [preview, setPreview] = useState(null)
-  const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
+  const [imageB64, setImageB64] = useState(null)
+  const [imagePreview, setImagePreview] = useState(null)
   const [result, setResult] = useState(null)
-  const [invalidResult, setInvalidResult] = useState(null) // non-null when image is not a crop
-  const [error, setError] = useState('')
-  const [isDragging, setIsDragging] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
 
+  const pageRef = useRef(null)
   const resultRef = useRef(null)
-  const confRef = useRef(null)
 
-  // Upload handler
-  const handleFile = (selectedFile) => {
-    if (!selectedFile) return
-    if (!selectedFile.type.startsWith('image/')) {
-      setError('Please select an image file.')
-      return
-    }
-    setFile(selectedFile)
-    setPreview(URL.createObjectURL(selectedFile))
-    setResult(null)
-    setInvalidResult(null)
-    setError('')
-  }
+  useEffect(() => {
+    const ctx = gsap.context(() => {
+      gsap.from('.grade-intro', { y: 18, autoAlpha: 0, duration: 0.45, ease: 'power3.out' })
+      gsap.from('.grade-upload-card', { y: 28, autoAlpha: 0, duration: 0.55, ease: 'power3.out', delay: 0.08 })
+      gsap.from('.grade-side-panel', { y: 28, autoAlpha: 0, duration: 0.55, ease: 'power3.out', delay: 0.16 })
+    }, pageRef)
+    return () => ctx.revert()
+  }, [])
 
-  // Drag and drop events
-  const onDragOver = (e) => { e.preventDefault(); setIsDragging(true) }
-  const onDragLeave = (e) => { e.preventDefault(); setIsDragging(false) }
-  const onDrop = (e) => {
-    e.preventDefault()
-    setIsDragging(false)
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFile(e.dataTransfer.files[0])
-    }
-  }
+  useEffect(() => {
+    if (!result || !resultRef.current) return
+    const ctx = gsap.context(() => {
+      const tl = gsap.timeline({ defaults: { ease: 'power3.out' } })
+      tl
+        .from(resultRef.current, { y: 24, autoAlpha: 0, duration: 0.48 })
+        .from('.grade-verdict', { scale: 0.88, autoAlpha: 0, duration: 0.5 }, '-=0.2')
+        .from('.grade-evidence-row', { y: 16, autoAlpha: 0, duration: 0.38, stagger: 0.08 }, '-=0.2')
+      gsap.fromTo('.grade-confidence-bar', { width: '0%' }, { width: `${(result.confidence * 100).toFixed(0)}%`, duration: 0.9, ease: 'power2.out', delay: 0.4 })
+    }, resultRef)
+    return () => ctx.revert()
+  }, [result])
 
-  // Convert file to base64
-  const fileToBase64 = (f) => new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result.split(',')[1]) // strip data:... prefix
-    reader.onerror = reject
-    reader.readAsDataURL(f)
-  })
-
-  // Form submission
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const handleImageChange = (e) => {
+    const file = e.target.files[0]
     if (!file) return
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      setImagePreview(reader.result)
+      setImageB64(reader.result.split(',')[1])
+      setResult(null)
+      setError(null)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const handleGrade = async () => {
     setLoading(true)
-    setError('')
-    setResult(null)
-    setInvalidResult(null)
-
+    setError(null)
     try {
-      const image_b64 = await fileToBase64(file)
-
-      const res = await fetch(`${API_BASE}/grade/crop`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image_b64, crop_type: 'auto' }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || 'Grading failed')
-
-      // Image is not a crop — show plain rejection message
-      if (!data.is_valid) {
-        setInvalidResult(data.invalid_reason || 'This image does not appear to be a crop, vegetable, or fruit.')
-        return
-      }
-
-      // Map backend GradeResponse → UI shape
-      const priceParts = (data.estimated_price_band || '0-0').match(/[\d.]+/g) || ['0','0']
-      setResult({
-        crop: data.detected_crop_type || 'Unknown',
-        grade: data.grade,
-        confidence: data.confidence,
-        reasoning: data.agmark_standard,
-        findings: {
-          positive: data.defects.length === 0 ? ['No defects detected'] : [],
-          negative: data.defects,
-        },
-        price_estimate: {
-          min: parseFloat(priceParts[0]),
-          max: parseFloat(priceParts[1] || priceParts[0]),
-        },
-      })
-    } catch (err) {
-      setError(err.message)
+      const res = await axios.post(`${API}/grade/crop`, { image_b64: imageB64, crop_type: 'auto' })
+      setResult(res.data)
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message)
     } finally {
       setLoading(false)
     }
   }
 
-  // Animate result reveal
-  useEffect(() => {
-    if (result && resultRef.current) {
-      const gMeta = GRADE_META[result.grade] || GRADE_META.C
+  const startNegotiation = () => {
+    const crop_type = result.detected_crop_type || 'tomato'
+    localStorage.setItem('kd_grade', JSON.stringify({ grade: result, crop_type }))
+    localStorage.setItem('kd_autostart', '1')
+    navigate('/negotiate')
+  }
 
-      const ctx = gsap.context(() => {
-        gsap.fromTo(resultRef.current,
-          { opacity: 0, y: 30, scale: 0.95 },
-          { opacity: 1, y: 0, scale: 1, duration: 0.8, ease: 'back.out(1.2)' }
-        )
-        
-        // Confidence bar animation
-        if (confRef.current) {
-          gsap.fromTo(confRef.current,
-            { width: '0%' },
-            { width: `${result.confidence * 100}%`, duration: 1.5, ease: 'power3.out', delay: 0.3 }
-          )
-        }
-      })
+  const goNegotiate = () => {
+    const crop_type = result.detected_crop_type || 'tomato'
+    localStorage.setItem('kd_grade', JSON.stringify({ grade: result, crop_type }))
+    navigate('/negotiate')
+  }
 
-      // Trigger confetti for Grade A
-      if (gMeta.confetti) {
-        setTimeout(() => triggerConfetti(resultRef.current), 300)
-      }
-
-      return () => ctx.revert()
-    }
-  }, [result])
+  const meta = result ? GRADE_META[result.grade] : null
+  const detectedCrop = result?.detected_crop_type
+    ? result.detected_crop_type.charAt(0).toUpperCase() + result.detected_crop_type.slice(1)
+    : null
 
   return (
-    <div className="pt-6 pb-20 animate-in fade-in duration-500">
-      
-      {/* HEADER */}
-      <div className="mb-8">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold mb-3"
-             style={{ background: 'rgba(34,197,94,0.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.2)' }}>
-          <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-          Gemini Vision API
-        </div>
-        <h1 className="text-3xl font-black font-display tracking-tight mb-2" style={{ color: 'var(--text-primary)' }}>Agmark AI Grading</h1>
-        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-          Upload a clear photo of your harvest. The AI will assess quality, spot defects, and estimate your fair price.
-        </p>
+    <div ref={pageRef} className="space-y-6 pb-6">
+      <div className="grade-intro">
+        <PageIntro
+          eyebrow="Inspection Desk"
+          title="Inspect one crop lot with evidence, not guesswork."
+          desc="Photograph the harvest, let Gemini identify the crop and grade quality, then carry that proof straight into negotiation."
+          aside={<StatusBadge tone="leaf">Vision ready</StatusBadge>}
+        />
       </div>
 
-      <ErrorAlert error={error} />
-
-      {/* UPLOAD FORM */}
-      <div className={`${KD_CARD} p-5 mt-4`}>
-        <form onSubmit={handleSubmit} className="space-y-5">
-          
-          <div 
-            className={`relative border-2 border-dashed rounded-2xl p-8 text-center transition-all duration-300 ${
-              isDragging ? 'border-green-500 bg-green-500/5' : 'border-[var(--border-card)]'
-            }`}
-            style={{ 
-              backgroundColor: preview ? 'transparent' : 'var(--input-bg)',
-              borderColor: preview ? 'var(--border-subtle)' : undefined
-            }}
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
-            onDrop={onDrop}
-          >
-            {preview ? (
-              <div className="relative w-full aspect-video rounded-xl overflow-hidden shadow-lg border" style={{ borderColor: 'var(--border-subtle)' }}>
-                <img src={preview} alt="Crop Preview" className="w-full h-full object-cover" />
-                
-                {/* Custom scanning animation over image when loading */}
-                {loading && (
-                  <>
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-all" />
-                    <div className="absolute inset-0 flex flex-col items-center justify-center z-20">
-                      <SpinnerIcon className="w-8 h-8 text-green-400 mb-3" />
-                      <p className="text-white font-bold tracking-widest text-xs uppercase animate-pulse">Analyzing crop...</p>
-                    </div>
-                    <div className="scan-line-el" />
-                  </>
-                )}
-                
-                <button
-                  type="button"
-                  onClick={() => { setFile(null); setPreview(null); setResult(null); }}
-                  disabled={loading}
-                  className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 text-white flex items-center justify-center hover:bg-red-500 transition-colors backdrop-blur-md"
-                >
-                  ✕
-                </button>
-              </div>
-            ) : (
-              <label className="cursor-pointer flex flex-col items-center group">
-                <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4 transition-transform group-hover:scale-110"
-                     style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', color: '#22c55e' }}>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="w-8 h-8">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
-                  </svg>
-                </div>
-                <p className="text-sm font-bold font-display" style={{ color: 'var(--text-primary)' }}>Tap to take photo or upload</p>
-                <p className="text-xs mt-1.5" style={{ color: 'var(--text-muted)' }}>Good lighting gets better results</p>
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFile(e.target.files?.[0])} disabled={loading} />
-              </label>
-            )}
+      <div className={`grid gap-5 ${result ? 'xl:grid-cols-[1.02fr_0.98fr]' : 'lg:grid-cols-[1fr_360px]'}`}>
+        <SurfaceCard className="grade-upload-card grain-surface overflow-hidden p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 pb-4">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--millet-300)]">Capture</p>
+              <p className="mt-1 font-display text-2xl text-[var(--mist-100)]">Crop inspection frame</p>
+            </div>
+            <StatusBadge tone="leaf">Auto crop detection</StatusBadge>
           </div>
+
+          <div className="mt-5 grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+            <label className="group relative block cursor-pointer">
+              <div className="field-glow relative min-h-[320px] overflow-hidden rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,rgba(25,21,17,0.92),rgba(17,14,10,0.92))]">
+                {imagePreview ? (
+                  <img src={imagePreview} alt="crop preview" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-4 px-6 text-center">
+                    <div className="flex h-20 w-20 items-center justify-center rounded-[24px] border border-white/10 bg-white/5 text-[var(--leaf-300)]">
+                      <CameraIcon className="h-9 w-9" />
+                    </div>
+                    <div className="space-y-2">
+                      <p className="font-display text-2xl text-[var(--mist-100)]">Frame the crop lot cleanly</p>
+                      <p className="text-sm leading-6 text-[var(--mist-400)]">Use one crop batch, daylight when possible, and a clear surface so the grade reads as evidence.</p>
+                    </div>
+                  </div>
+                )}
+
+                {loading && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[rgba(15,13,9,0.82)] backdrop-blur-sm">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full border border-[rgba(124,175,77,0.2)] bg-[rgba(124,175,77,0.08)] text-[var(--leaf-300)]">
+                      <SpinnerIcon className="h-5 w-5" />
+                    </div>
+                    <p className="text-sm font-medium text-[var(--leaf-300)]">Gemini is grading the lot</p>
+                  </div>
+                )}
+              </div>
+              <input type="file" accept="image/*" capture="environment" onChange={handleImageChange} className="hidden" />
+            </label>
+
+            <div className="grade-side-panel space-y-4 rounded-[26px] border border-white/8 bg-white/5 p-4">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--mist-500)]">Evidence chain</p>
+                <div className="mt-4 space-y-3">
+                  {[
+                    'Identify the crop automatically from the image.',
+                    'Grade quality against Agmark expectations.',
+                    'Push the pricing premium into negotiation setup.'
+                  ].map((item, index) => (
+                    <div key={item} className="flex items-start gap-3">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-full border border-[rgba(124,175,77,0.2)] bg-[rgba(124,175,77,0.08)] text-xs font-semibold text-[var(--leaf-300)]">{index + 1}</div>
+                      <p className="text-sm leading-6 text-[var(--mist-400)]">{item}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-[22px] border border-white/8 bg-[rgba(255,255,255,0.04)] p-4">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--mist-500)]">Negotiation effect</p>
+                <p className="mt-2 font-display text-xl text-[var(--mist-100)]">Your grade controls the opening ask.</p>
+                <p className="mt-2 text-sm leading-6 text-[var(--mist-400)]">Grade A starts strongest, Grade B holds standard premium, and Grade C still preserves a floor before bargaining begins.</p>
+              </div>
+            </div>
+          </div>
+
+          <ErrorAlert error={error} className="mt-4" />
 
           <button
-            type="submit"
-            disabled={!file || loading}
-            className="w-full kd-btn-primary text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-all"
+            onClick={handleGrade}
+            disabled={!imageB64 || loading}
+            className="mt-5 flex w-full items-center justify-center gap-2 rounded-[22px] bg-[linear-gradient(135deg,var(--leaf-400),var(--leaf-600))] px-5 py-4 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(79,111,44,0.28)] transition disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {loading ? (
-              <>
-                <SpinnerIcon /> Processing...
-              </>
-            ) : (
-              'Analyze Quality'
-            )}
+            {loading ? <><SpinnerIcon /> Analysing crop quality...</> : <><CameraIcon className="h-4 w-4" /> Analyse crop with AI</>}
           </button>
-        </form>
+        </SurfaceCard>
+
+        <SurfaceCard className="p-5">
+          {!result || !meta ? (
+            <div className="flex h-full min-h-[420px] flex-col justify-between">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--mist-500)]">Result surface</p>
+                <p className="mt-2 font-display text-3xl leading-tight text-[var(--mist-100)]">The verdict appears here as soon as the lot is graded.</p>
+                <p className="mt-3 max-w-md text-sm leading-6 text-[var(--mist-400)]">Once the image is analysed, this panel turns into a proof sheet with crop detection, grade confidence, price band, and the opening ask multiplier.</p>
+              </div>
+              <div className="rounded-[26px] border border-white/8 bg-[rgba(255,255,255,0.04)] p-5">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--mist-500)]">What we lock in</p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-[20px] border border-white/8 bg-[rgba(18,15,11,0.65)] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--mist-500)]">Crop identity</p>
+                    <p className="mt-2 text-sm text-[var(--mist-300)]">No manual selection needed before grading.</p>
+                  </div>
+                  <div className="rounded-[20px] border border-white/8 bg-[rgba(18,15,11,0.65)] p-4">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--mist-500)]">Price leverage</p>
+                    <p className="mt-2 text-sm text-[var(--mist-300)]">The grade multiplier flows straight into your negotiation setup.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div ref={resultRef} className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/8 pb-4">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--millet-300)]">Inspection result</p>
+                  <p className="mt-1 font-display text-3xl text-[var(--mist-100)]">Grade evidence sheet</p>
+                </div>
+                <StatusBadge tone={meta.tone}>{meta.sublabel}</StatusBadge>
+              </div>
+
+              <div className="grade-verdict field-glow overflow-hidden rounded-[28px] border px-5 py-5" style={{ borderColor: meta.border, background: `linear-gradient(180deg, ${meta.wash}, rgba(18,15,11,0.96))` }}>
+                <div className="flex flex-wrap items-center justify-between gap-5">
+                  <div className="space-y-3">
+                    {detectedCrop && (
+                      <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-[var(--mist-300)]">
+                        <CropIcon crop={result.detected_crop_type} className="h-3.5 w-3.5" />
+                        {detectedCrop}
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--mist-500)]">Agmark verdict</p>
+                      <div className="mt-2 flex items-end gap-4">
+                        <span className={`font-display text-7xl leading-none ${meta.text}`}>{result.grade}</span>
+                        <div className="pb-2">
+                          <p className={`text-sm font-semibold ${meta.text}`}>{meta.label}</p>
+                          <p className="mt-1 text-xs text-[var(--mist-400)]">{meta.multiplierNote}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="min-w-[180px] rounded-[22px] border border-white/10 bg-[rgba(255,255,255,0.04)] p-4 text-right">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-[var(--mist-500)]">Opening ask</p>
+                    <p className={`mt-2 font-display text-4xl ${meta.text}`}>{meta.multiplier}</p>
+                    <p className="mt-1 text-sm text-[var(--mist-400)]">of modal price</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grade-evidence-row rounded-[22px] border border-white/8 bg-[rgba(255,255,255,0.04)] p-4">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--mist-500)]">Estimated band</p>
+                  <p className="tabular-nums mt-2 font-display text-3xl text-[var(--mist-100)]">{result.estimated_price_band}</p>
+                </div>
+                <div className="grade-evidence-row rounded-[22px] border border-white/8 bg-[rgba(255,255,255,0.04)] p-4">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--mist-500)]">Confidence</p>
+                  <div className="mt-2 flex items-end gap-3">
+                    <p className="tabular-nums font-display text-3xl text-[var(--mist-100)]">{(result.confidence * 100).toFixed(0)}%</p>
+                    <div className="mb-1 h-2 flex-1 overflow-hidden rounded-full bg-white/10">
+                      <div className="grade-confidence-bar h-full rounded-full bg-[linear-gradient(90deg,var(--leaf-400),var(--millet-300))]" style={{ width: `${result.confidence * 100}%` }} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grade-evidence-row rounded-[22px] border border-white/8 bg-[rgba(255,255,255,0.04)] p-4">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--mist-500)]">Agmark note</p>
+                <p className="mt-2 text-sm leading-6 text-[var(--mist-300)]">{result.agmark_standard}</p>
+              </div>
+
+              {result.defects.length > 0 && (
+                <div className="grade-evidence-row rounded-[22px] border border-[rgba(194,93,70,0.22)] bg-[rgba(194,93,70,0.08)] p-4">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--danger-300)]">Detected defects</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {result.defects.map((defect) => (
+                      <span key={defect} className="inline-flex items-center gap-2 rounded-full border border-[rgba(194,93,70,0.22)] px-3 py-1 text-xs text-[var(--danger-300)]">
+                        <span className="h-1.5 w-1.5 rounded-full bg-[var(--danger-300)]" />
+                        {defect}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  onClick={startNegotiation}
+                  className="flex items-center justify-center gap-2 rounded-[22px] bg-[linear-gradient(135deg,var(--leaf-400),var(--leaf-600))] px-5 py-4 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(79,111,44,0.28)] transition"
+                >
+                  <ScaleIcon className="h-4 w-4" />
+                  Start negotiation at {meta.multiplier}
+                  <ArrowRightIcon className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={goNegotiate}
+                  className="flex items-center justify-center gap-2 rounded-[22px] border border-white/10 bg-white/5 px-5 py-4 text-sm font-medium text-[var(--mist-300)] transition hover:bg-white/8"
+                >
+                  <CheckIcon className="h-4 w-4" />
+                  Review negotiation settings
+                </button>
+              </div>
+            </div>
+          )}
+        </SurfaceCard>
       </div>
 
-      {/* INVALID IMAGE MESSAGE */}
-      {invalidResult && (
-        <div className="mt-6 flex items-start gap-3 p-4 rounded-2xl"
-             style={{ background: 'rgba(239,68,68,0.08)', border: '1.5px solid rgba(239,68,68,0.25)' }}>
-          <span className="text-2xl flex-shrink-0 mt-0.5">🚫</span>
-          <div>
-            <p className="font-bold text-sm" style={{ color: '#f87171' }}>Image Not Applicable</p>
-            <p className="text-sm mt-1" style={{ color: 'var(--text-secondary)' }}>{invalidResult}</p>
-            <p className="text-xs mt-2" style={{ color: 'var(--text-muted)' }}>Please upload a clear photo of a vegetable, fruit, or grain crop for Agmark grading.</p>
-          </div>
-        </div>
-      )}
-
-      {/* RESULTS */}
-      {result && (
-        <div ref={resultRef} className="mt-8 space-y-4 relative">
-          
-          {/* Main Grade Card */}
-          <div className="p-6 rounded-2xl relative overflow-hidden"
-               style={{ 
-                 background: GRADE_META[result.grade].bg, 
-                 border: `1.5px solid ${GRADE_META[result.grade].border}`,
-                 boxShadow: result.grade === 'A' ? 'var(--glow-green)' : 'var(--shadow-card)'
-               }}>
-            
-            {/* Background glow if grade A */}
-            {result.grade === 'A' && (
-              <div className="absolute top-0 right-0 w-64 h-64 bg-green-500 rounded-full mix-blend-overlay blur-3xl opacity-20 pointer-events-none" />
-            )}
-
-            <div className="flex items-start justify-between relative z-10">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-widest mb-1 font-display" style={{ color: 'var(--text-muted)' }}>Detected Crop</p>
-                <div className="flex items-center gap-2 mb-4">
-                  <CropBadge crop={result.crop} />
-                </div>
-                
-                <p className="text-xs font-bold uppercase tracking-widest mb-1 mt-4 font-display" style={{ color: 'var(--text-muted)' }}>Agmark Grade</p>
-                <div className="flex items-center gap-3">
-                  <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-white shadow-sm"
-                       style={{ color: GRADE_META[result.grade].color }}>
-                    <span className="text-3xl font-black font-display">{result.grade}</span>
-                  </div>
-                  <div>
-                    <p className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>
-                      {GRADE_META[result.grade].label} {GRADE_META[result.grade].icon}
-                    </p>
-                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-secondary)' }}>Based on visual characteristics</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Confidence Bar */}
-            <div className="mt-6 pt-5" style={{ borderTop: `1px solid ${GRADE_META[result.grade].border}` }}>
-              <div className="flex justify-between items-end mb-2">
-                <span className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>AI Confidence</span>
-                <span className="text-sm font-bold font-mono" style={{ color: GRADE_META[result.grade].color }}>
-                  {(result.confidence * 100).toFixed(1)}%
-                </span>
-              </div>
-              <div className="h-2 rounded-full overflow-hidden bg-black/10" style={{ background: 'var(--input-bg)' }}>
-                <div 
-                  ref={confRef}
-                  className="h-full rounded-full transition-all duration-1000"
-                  style={{ background: GRADE_META[result.grade].color, width: '0%' }}
-                />
-              </div>
-              <div className="flex justify-between mt-1 px-1">
-                <span className="text-[10px]" style={{ color: 'var(--text-faint)' }}>0%</span>
-                <span className="text-[10px]" style={{ color: 'var(--text-faint)' }}>50%</span>
-                <span className="text-[10px]" style={{ color: 'var(--text-faint)' }}>100%</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Details & Findings */}
-          <div className={`${KD_CARD} p-5`}>
-            <p className="text-xs font-bold uppercase tracking-widest mb-4 font-display" style={{ color: 'var(--text-muted)' }}>Analysis Details</p>
-            <p className="text-sm leading-relaxed mb-6" style={{ color: 'var(--text-primary)' }}>{result.reasoning}</p>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="p-3 rounded-xl" style={{ background: 'var(--bg-card-2)', border: '1px solid var(--border-subtle)' }}>
-                <div className="flex items-center gap-1.5 mb-1 text-green-500">
-                  <span className="text-sm">✅</span>
-                  <span className="text-xs font-bold">Good Signs</span>
-                </div>
-                <ul className="text-xs space-y-1.5 mt-2" style={{ color: 'var(--text-secondary)' }}>
-                  {result.findings.positive.map((p, i) => (
-                    <li key={i} className="flex gap-1.5"><span className="opacity-50">•</span>{p}</li>
-                  ))}
-                  {result.findings.positive.length === 0 && <li className="italic opacity-50">None highlighted</li>}
-                </ul>
-              </div>
-              <div className="p-3 rounded-xl" style={{ background: 'var(--bg-card-2)', border: '1px solid var(--border-subtle)' }}>
-                <div className="flex items-center gap-1.5 mb-1 text-red-400">
-                  <span className="text-sm">⚠️</span>
-                  <span className="text-xs font-bold">Issues</span>
-                </div>
-                <ul className="text-xs space-y-1.5 mt-2" style={{ color: 'var(--text-secondary)' }}>
-                  {result.findings.negative.map((n, i) => (
-                    <li key={i} className="flex gap-1.5"><span className="opacity-50">•</span>{n}</li>
-                  ))}
-                  {result.findings.negative.length === 0 && <li className="italic opacity-50">None detected</li>}
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          {/* Price Range & CTA */}
-          <div className="p-6 rounded-2xl bg-gradient-to-br from-amber-500/10 to-orange-600/10 border border-amber-500/30">
-            <p className="text-xs font-bold uppercase tracking-widest text-amber-500/80 mb-2 font-display">Estimated Market Value</p>
-            <div className="flex items-baseline gap-2 mb-4">
-              <PriceDisplay amount={result.price_estimate.min} size="lg" className="text-amber-500" unit={false} />
-              <span className="text-amber-500/50 font-medium">—</span>
-              <PriceDisplay amount={result.price_estimate.max} size="lg" className="text-amber-500" unit="/kg" />
-            </div>
-            
-            <p className="text-xs text-amber-500/80 mb-5 max-w-[280px]">
-              Based on live APMC data for Grade {result.grade} {result.crop}. Use this as your starting point for negotiation.
-            </p>
-
-            <Link 
-              to={`/negotiate?crop=${result.crop}&grade=${result.grade}`}
-              className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 shadow-lg transition-transform active:scale-95"
-            >
-              Start Negotiation 🤝
-            </Link>
-          </div>
-
-        </div>
-      )}
+      <p className="text-center text-[11px] leading-6 text-[var(--mist-500)]">Gemini Vision grades the image locally for this session. Crop photos are not persisted by the UI.</p>
     </div>
   )
 }

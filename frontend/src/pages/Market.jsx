@@ -1,385 +1,372 @@
-import { useState, useEffect, useRef } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
-import { gsap } from 'gsap'
 import L from 'leaflet'
-import { LeafIcon, AlertIcon, SpinnerIcon, ErrorAlert, INPUT_CLS, SELECT_CLS, KD_CARD, SectionLabel, CropBadge, PriceDisplay } from '../components/ui.jsx'
+import gsap from 'gsap'
+import axios from 'axios'
+import {
+  ArrowRightIcon,
+  ChartIcon,
+  ErrorAlert,
+  FieldLabel,
+  INPUT_CLS,
+  MapPinIcon,
+  PageIntro,
+  SELECT_CLS,
+  SpinnerIcon,
+  StatusBadge,
+  SurfaceCard,
+} from '../components/ui.jsx'
 
-// API base
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-// Crops list with emojis for select
 const CROPS = [
-  { id: 'tomato', name: 'Tomato', emoji: '🍅' },
-  { id: 'wheat', name: 'Wheat', emoji: '🌾' },
-  { id: 'onion', name: 'Onion', emoji: '🧅' },
-  { id: 'potato', name: 'Potato', emoji: '🥔' },
-  { id: 'cotton', name: 'Cotton', emoji: '🌿' },
+  'tomato', 'wheat', 'onion', 'potato', 'rice',
+  'maize', 'soybean', 'cotton', 'sugarcane', 'bajra', 'jowar', 'mustard',
 ]
 
-const STATES = ['Karnataka', 'Maharashtra', 'Punjab', 'Gujarat', 'Uttar Pradesh']
+const STATES = [
+  'Andhra Pradesh', 'Bihar', 'Chhattisgarh', 'Gujarat', 'Haryana',
+  'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh',
+  'Maharashtra', 'Odisha', 'Punjab', 'Rajasthan', 'Tamil Nadu',
+  'Telangana', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
+]
 
-// Custom map markers
-const createCustomIcon = (isBest = false, isLight = false) => {
-  const color = isBest ? '#f59e0b' : '#22c55e'
-  const glow = isBest ? '0 0 10px rgba(245,158,11,0.6)' : '0 0 10px rgba(34,197,94,0.6)'
-  
+const STATE_CENTERS = {
+  'karnataka': [15.32, 75.71], 'maharashtra': [19.75, 75.71],
+  'punjab': [31.15, 75.34], 'uttar pradesh': [26.85, 80.95],
+  'gujarat': [22.26, 71.19], 'rajasthan': [27.02, 74.22],
+  'madhya pradesh': [22.97, 78.66], 'andhra pradesh': [15.91, 79.74],
+  'haryana': [29.06, 76.09], 'west bengal': [22.99, 87.85],
+  'bihar': [25.10, 85.31], 'tamil nadu': [11.13, 78.66],
+  'telangana': [17.12, 79.21], 'odisha': [20.95, 85.10],
+}
+
+const PIN_COLORS = [
+  { bg: '#c9a96c', border: '#9a7a44', text: '#fff7e7' },
+  { bg: '#7caf4d', border: '#537d2f', text: '#f3eee2' },
+  { bg: '#463d31', border: '#2a241d', text: '#d4c8b1' },
+  { bg: '#342d24', border: '#1f1a14', text: '#b8aa90' },
+]
+
+function createPinIcon(rank) {
+  const c = PIN_COLORS[Math.min(rank, 3)]
+  const size = rank === 0 ? 34 : rank === 1 ? 30 : 26
   return L.divIcon({
-    className: 'custom-leaflet-marker',
-    html: `
-      <div style="
-        width: ${isBest ? '24px' : '16px'};
-        height: ${isBest ? '24px' : '16px'};
-        background-color: ${color};
-        border: 2px solid ${isLight ? '#fff' : '#0d1510'};
-        border-radius: 50%;
-        box-shadow: ${glow};
-        animation: float 3s ease-in-out infinite;
-      ">
-        ${isBest ? '<div style="position:absolute;top:-12px;left:4px;font-size:12px;">👑</div>' : ''}
-      </div>
-    `,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
+    className: '',
+    html: `<div style="
+      width:${size}px;height:${size}px;
+      background:${c.bg};border:2.5px solid ${c.border};
+      border-radius:50% 50% 50% 0;transform:rotate(-45deg);
+      box-shadow:0 8px 20px rgba(0,0,0,0.35);
+      display:flex;align-items:center;justify-content:center;
+    "><span style="transform:rotate(45deg);color:${c.text};font-size:${rank === 0 ? 11 : 10}px;font-weight:800;line-height:1;">${rank + 1}</span></div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size],
+    popupAnchor: [0, -size],
   })
 }
 
-// Map Updater Component
-function MapUpdater({ center, zoom }) {
+function FitBounds({ positions }) {
   const map = useMap()
   useEffect(() => {
-    map.setView(center, zoom, { animate: true, duration: 1.5 })
-  }, [center, zoom, map])
+    if (positions.length >= 2) {
+      map.fitBounds(positions, { padding: [28, 28] })
+    } else if (positions.length === 1) {
+      map.setView(positions[0], 10)
+    }
+  }, [positions, map])
   return null
+}
+
+function MandiMap({ mandis }) {
+  const withCoords = mandis.filter(m => m.lat && m.lon)
+  if (!withCoords.length) return null
+
+  const positions = withCoords.map(m => [m.lat, m.lon])
+  const center = STATE_CENTERS[withCoords[0]?.district?.toLowerCase()] || positions[0]
+
+  return (
+    <div className="market-map overflow-hidden rounded-[30px] border border-white/10 shadow-[0_20px_60px_rgba(0,0,0,0.24)]" style={{ height: '100%', minHeight: '340px' }}>
+      <MapContainer center={center} zoom={7} style={{ height: '100%', width: '100%', background: '#17140f' }} zoomControl={false} scrollWheelZoom={false}>
+        <TileLayer
+          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+        />
+        <FitBounds positions={positions} />
+        {withCoords.map((m, i) => (
+          <Marker key={m.name} position={[m.lat, m.lon]} icon={createPinIcon(i)}>
+            <Popup>
+              <div style={{ fontSize: '12px', lineHeight: '1.5', minWidth: '150px' }}>
+                <strong style={{ fontSize: '13px' }}>{m.name}</strong><br />
+                <span style={{ color: '#678f39', fontWeight: 700 }}>Rs.{m.price}/kg</span>
+                {' '}| {m.distance_km} km<br />
+                Net: <strong>Rs.{m.net?.toFixed(2)}/kg</strong><br />
+                <span style={{ color: '#857864', fontSize: '11px' }}>{m.trend === 'up' ? 'Rising' : m.trend === 'down' ? 'Falling' : 'Stable'}</span>
+              </div>
+            </Popup>
+          </Marker>
+        ))}
+      </MapContainer>
+    </div>
+  )
+}
+function TrendBadge({ trend }) {
+  if (trend === 'up') return <StatusBadge tone="leaf">Rising</StatusBadge>
+  if (trend === 'down') return <StatusBadge tone="danger">Falling</StatusBadge>
+  return <StatusBadge>Stable</StatusBadge>
+}
+
+function SupplyBar({ arrivals }) {
+  const max = 1500
+  const pct = Math.min(100, Math.round((arrivals / max) * 100))
+  const label = arrivals >= 800 ? 'High' : arrivals >= 400 ? 'Medium' : 'Low'
+  const color = arrivals >= 800 ? 'bg-[var(--leaf-400)]' : arrivals >= 400 ? 'bg-[var(--millet-300)]' : 'bg-[var(--mist-500)]'
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-[11px] text-[var(--mist-500)]">
+        <span className="uppercase tracking-[0.2em]">Supply</span>
+        <span className="tabular-nums text-[var(--mist-300)]">{arrivals}t | {label}</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-white/8">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  )
 }
 
 export default function Market() {
   const [crop, setCrop] = useState('tomato')
   const [state, setState] = useState('Karnataka')
-  const [data, setData] = useState(null)
+  const [transportRate, setTransportRate] = useState('0.025')
+  const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [isLightMode, setIsLightMode] = useState(false)
+  const [error, setError] = useState(null)
 
-  const bestMandiRef = useRef(null)
-  const listRef = useRef(null)
+  const pageRef = useRef(null)
+  const resultsRef = useRef(null)
 
-  // Listen to theme changes for map layer
   useEffect(() => {
-    const checkTheme = () => setIsLightMode(document.documentElement.getAttribute('data-theme') === 'light')
-    checkTheme()
-    
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (mutation.attributeName === 'data-theme') checkTheme()
-      })
-    })
-    observer.observe(document.documentElement, { attributes: true })
-    return () => observer.disconnect()
+    const ctx = gsap.context(() => {
+      gsap.from('.market-intro', { y: 18, autoAlpha: 0, duration: 0.45, ease: 'power3.out' })
+      gsap.from('.market-controls', { y: 24, autoAlpha: 0, duration: 0.55, ease: 'power3.out', delay: 0.08 })
+    }, pageRef)
+    return () => ctx.revert()
   }, [])
 
-  // Fetch prices from /market/mandis
-  const fetchPrices = async () => {
+  useEffect(() => {
+    if (!result || !resultsRef.current) return
+    const ctx = gsap.context(() => {
+      const tl = gsap.timeline({ defaults: { ease: 'power3.out' } })
+      tl
+        .from('.market-rec-banner', { y: 22, autoAlpha: 0, duration: 0.45 })
+        .from('.market-map', { scale: 0.98, autoAlpha: 0, duration: 0.5 }, '-=0.18')
+        .from('.market-mandi-card', { y: 24, autoAlpha: 0, duration: 0.42, stagger: 0.08 }, '-=0.24')
+    }, resultsRef)
+    return () => ctx.revert()
+  }, [result])
+
+  const fetchMandis = async () => {
     setLoading(true)
-    setError('')
+    setError(null)
+    setResult(null)
     try {
-      const res = await fetch(`${API_BASE}/market/mandis?crop=${crop}&state=${state}`)
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.detail || 'Failed to fetch prices')
-      
-      // Map backend fields to UI shape
-      const mandis = (json.mandis || []).map((m, i) => ({
-        name: m.name || m.mandi || `Mandi ${i+1}`,
-        district: m.district || '',
-        modal_price: m.price || m.modal_price || 0,
-        distance_km: m.distance_km || Math.round(20 + i * 15),
-        transport_cost: m.transport_cost || Math.round((m.distance_km || 20 + i * 15) * 0.3),
-        net_value: m.net_value || (m.price || 0) - Math.round((m.distance_km || 20) * 0.3),
-        arrivals: m.arrivals || m.arrivals_tonnes || 0,
-        trend: m.trend || 'stable',
-        lat: m.lat || 15 + i * 0.5,
-        lng: m.lng || 75 + i * 0.5,
-      }))
-
-      // Sort by net_value descending
-      mandis.sort((a, b) => b.net_value - a.net_value)
-      
-      // Recalculate net_value if missing
-      mandis.forEach(m => {
-        if (!m.net_value || m.net_value <= 0) {
-          m.net_value = m.modal_price - m.transport_cost
-        }
+      const res = await axios.get(`${API}/market/mandis`, {
+        params: {
+          crop: crop.toLowerCase(),
+          state: state.toLowerCase().replace(/ /g, '_'),
+        },
       })
-
-      setData({
-        crop: json.crop,
-        state: json.state,
-        mandis,
-        best_mandi: mandis[0] || null,
-      })
-    } catch (err) {
-      setError(err.message)
+      setResult(res.data)
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message)
     } finally {
       setLoading(false)
     }
   }
 
-  // Initial load
-  useEffect(() => { fetchPrices() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const rate = parseFloat(transportRate) || 0.025
+  const enrichedMandis = result?.mandis?.map(m => ({
+    ...m,
+    transport: parseFloat((m.distance_km * rate).toFixed(2)),
+    net: parseFloat((m.price - m.distance_km * rate).toFixed(2)),
+  })) ?? []
 
-  // Form submit
-  const handleSearch = (e) => {
-    e.preventDefault()
-    fetchPrices()
-  }
-
-  // Animations when data loads
-  useEffect(() => {
-    if (data && !loading) {
-      const ctx = gsap.context(() => {
-        if (bestMandiRef.current) {
-          gsap.fromTo(bestMandiRef.current,
-            { scale: 0.9, opacity: 0, y: 20 },
-            { scale: 1, opacity: 1, y: 0, duration: 0.7, ease: 'back.out(1.5)' }
-          )
-        }
-        
-        if (listRef.current) {
-          gsap.fromTo(listRef.current.children,
-            { x: -20, opacity: 0 },
-            { x: 0, opacity: 1, duration: 0.5, stagger: 0.1, ease: 'power2.out' }
-          )
-        }
-        
-        // Number counting animation
-        const counters = document.querySelectorAll('.price-counter')
-        counters.forEach(counter => {
-          const val = parseFloat(counter.innerText)
-          const obj = { val: 0 }
-          gsap.to(obj, {
-            val: val,
-            duration: 1.5,
-            ease: 'power3.out',
-            onUpdate: () => { counter.innerText = obj.val.toFixed(1) }
-          })
-        })
-      })
-      return () => ctx.revert()
-    }
-  }, [data, loading])
-
-  // Get map center based on first mandi
-  const mapCenter = data?.mandis?.[0]
-    ? [data.mandis[0].lat, data.mandis[0].lng]
-    : [20.5937, 78.9629] // India center
-
-  // Medals for top 3
-  const medals = ['🥇', '🥈', '🥉']
+  const sorted = [...enrichedMandis].sort((a, b) => b.net - a.net)
+  const best = sorted[0]
+  const second = sorted[1]
+  const extraPerKg = best && second ? (best.net - second.net).toFixed(2) : null
 
   return (
-    <div className="pt-6 pb-20 animate-in fade-in duration-500">
-      
-      {/* HEADER */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-black font-display tracking-tight mb-2" style={{ color: 'var(--text-primary)' }}>Live Mandi Prices</h1>
-        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
-          Real-time APMC data overlaid with transport costs to find your most profitable market.
-        </p>
+    <div ref={pageRef} className="space-y-6 pb-6">
+      <div className="market-intro">
+        <PageIntro
+          eyebrow="Mandi Atlas"
+          title="See the mandi choice as a route-to-profit decision."
+          desc="Compare modal price, freight drag, and net value in one surface so the best destination is obvious on both phone and desktop."
+          aside={<StatusBadge tone="leaf">Net value ranked</StatusBadge>}
+        />
       </div>
 
-      {/* CONTROLS */}
-      <div className={`${KD_CARD} mb-6`}>
-        <form onSubmit={handleSearch} className="flex gap-3">
-          <div className="flex-1">
-            <label className="block text-[10px] font-bold uppercase tracking-wider mb-1.5 ml-1" style={{ color: 'var(--text-muted)' }}>Crop</label>
-            <div className="relative">
-              <select 
-                value={crop} 
-                onChange={(e) => setCrop(e.target.value)}
-                className={`${SELECT_CLS} pl-9`}
-              >
-                {CROPS.map(c => <option key={c.id} value={c.id}>{c.emoji} {c.name}</option>)}
-              </select>
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
-                {CROPS.find(c => c.id === crop)?.emoji}
+      <div className="grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <SurfaceCard className="market-controls grain-surface p-5">
+          <div className="space-y-5">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.24em] text-[var(--millet-300)]">Route inputs</p>
+              <p className="mt-1 font-display text-2xl text-[var(--mist-100)]">Build the route before the deal.</p>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+              <div>
+                <FieldLabel>Crop</FieldLabel>
+                <select className={SELECT_CLS} value={crop} onChange={e => { setCrop(e.target.value); setResult(null) }}>
+                  {CROPS.map(c => (
+                    <option key={c} value={c} className="bg-gray-800">{c.charAt(0).toUpperCase() + c.slice(1)}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <FieldLabel>State</FieldLabel>
+                <select className={SELECT_CLS} value={state} onChange={e => { setState(e.target.value); setResult(null) }}>
+                  {STATES.map(s => <option key={s} value={s} className="bg-gray-800">{s}</option>)}
+                </select>
               </div>
             </div>
-          </div>
-          <div className="flex-1">
-            <label className="block text-[10px] font-bold uppercase tracking-wider mb-1.5 ml-1" style={{ color: 'var(--text-muted)' }}>State</label>
-            <select 
-              value={state} 
-              onChange={(e) => setState(e.target.value)}
-              className={SELECT_CLS}
-            >
-              {STATES.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          <div className="flex items-end pb-0.5">
-            <button type="submit" disabled={loading}
-              className="w-12 h-[42px] kd-btn-primary rounded-xl flex items-center justify-center text-white font-bold transition-all disabled:opacity-50"
-            >
-              {loading ? <SpinnerIcon /> : 'GO'}
-            </button>
-          </div>
-        </form>
-      </div>
 
-      <ErrorAlert error={error} />
-
-      {/* EMPTY / LOADING STATE */}
-      {!data && !loading && !error && (
-        <div className={`${KD_CARD} py-16 text-center border-dashed border-2`} style={{ borderColor: 'var(--border-subtle)' }}>
-          <div className="text-4xl mb-4 opacity-50">🌾</div>
-          <p className="font-bold font-display" style={{ color: 'var(--text-primary)' }}>No data to display</p>
-          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>Select a crop and state to see live prices.</p>
-        </div>
-      )}
-
-      {loading && !data && (
-        <div className="flex flex-col items-center justify-center py-20">
-          <SpinnerIcon className="w-8 h-8 text-green-500 mb-4" />
-          <p className="text-sm font-bold font-display animate-pulse" style={{ color: 'var(--text-muted)' }}>Fetching live APMC data...</p>
-        </div>
-      )}
-
-      {/* RESULTS */}
-      {data && !loading && (
-        <div className="space-y-6">
-          
-          {/* BEST MANDI BANNER */}
-          {data.best_mandi && (
-            <div ref={bestMandiRef} className="relative overflow-hidden rounded-2xl p-6"
-                 style={{ 
-                   background: 'linear-gradient(135deg, rgba(245,158,11,0.15) 0%, rgba(217,119,6,0.15) 100%)',
-                   border: '1px solid rgba(245,158,11,0.4)',
-                   boxShadow: 'var(--glow-amber)'
-                 }}>
-              <div className="absolute -right-6 -top-6 text-[100px] opacity-[0.06] transform -rotate-12 pointer-events-none">🏆</div>
-              
-              <div className="flex items-start justify-between relative z-10">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-xl">🏆</span>
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-500 font-display">Most Profitable</span>
-                  </div>
-                  <h2 className="text-2xl font-black font-display mb-1" style={{ color: 'var(--text-primary)' }}>{data.best_mandi.name}</h2>
-                  <p className="text-xs font-bold" style={{ color: 'var(--text-muted)' }}>Distance: {data.best_mandi.distance_km} km</p>
-                </div>
-                
-                <div className="text-right">
-                  <p className="text-[10px] font-bold uppercase tracking-wider mb-0.5 text-amber-500/80">Net Price</p>
-                  <PriceDisplay amount={data.best_mandi.net_value} size="lg" className="text-amber-500" />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* MAP */}
-          <div className="h-[280px] rounded-2xl overflow-hidden relative" style={{ border: '1px solid var(--border-card)', boxShadow: 'var(--shadow-card)' }}>
-            <MapContainer 
-              center={mapCenter} 
-              zoom={7} 
-              style={{ height: '100%', width: '100%', background: isLightMode ? '#e5e7eb' : '#0a0f0b' }} 
-              zoomControl={false}
-            >
-              <TileLayer
-                url={isLightMode 
-                  ? "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-                  : "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-                }
-                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            <div>
+              <FieldLabel meta="Rs./kg per km">Transport rate</FieldLabel>
+              <input
+                type="number"
+                step="0.005"
+                min="0"
+                className={INPUT_CLS}
+                value={transportRate}
+                onChange={e => { setTransportRate(e.target.value); setResult(null) }}
+                placeholder="0.025"
               />
-              <MapUpdater center={mapCenter} zoom={7} />
-              
-              {data.mandis.map((m, i) => (
-                <Marker 
-                  key={m.name} 
-                  position={[m.lat, m.lng]}
-                  icon={createCustomIcon(i === 0, isLightMode)}
-                >
-                  <Popup>
-                    <div className="p-1 min-w-[120px]">
-                      <p className="font-bold mb-1 border-b pb-1 font-display" style={{ borderColor: 'var(--border-subtle)' }}>
-                        {i === 0 && '👑 '} {m.name}
-                      </p>
-                      <div className="flex justify-between items-center text-xs mt-1.5">
-                        <span style={{ color: 'var(--text-muted)' }}>Price:</span>
-                        <span className="font-mono font-bold text-green-500">₹{m.modal_price}</span>
-                      </div>
-                      <div className="flex justify-between items-center text-xs mt-1">
-                        <span style={{ color: 'var(--text-muted)' }}>Net:</span>
-                        <span className="font-mono font-bold" style={{ color: i===0 ? '#f59e0b' : 'var(--text-primary)' }}>₹{m.net_value}</span>
-                      </div>
-                    </div>
-                  </Popup>
-                </Marker>
-              ))}
-            </MapContainer>
-            
-            {/* Map overlay gradient for seamless integration */}
-            <div className="absolute inset-x-0 bottom-0 h-16 pointer-events-none z-[400]"
-                 style={{ background: 'linear-gradient(to top, var(--bg-base) 0%, transparent 100%)' }} />
-          </div>
+              <p className="mt-2 text-xs leading-6 text-[var(--mist-500)]">Default freight assumes roughly Rs.2.50 per 100 km for every kilogram moved.</p>
+            </div>
 
-          {/* LIST */}
-          <div>
-            <SectionLabel className="mb-3">All Markets Ranked</SectionLabel>
-            <div ref={listRef} className="space-y-3">
-              {data.mandis.map((m, i) => (
-                <div key={m.name} className={`${KD_CARD} flex flex-col p-4 relative overflow-hidden group`}>
-                  
-                  {/* Subtle highlight for top 3 */}
-                  {i < 3 && (
-                    <div className="absolute left-0 top-0 bottom-0 w-1" 
-                         style={{ background: i===0 ? '#fbbf24' : i===1 ? '#94a3b8' : '#b45309' }} />
-                  )}
+            <ErrorAlert error={error} />
 
-                  <div className="flex justify-between items-start mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs bg-black/10 dark:bg-white/5">
-                        {i < 3 ? medals[i] : <span className="text-[10px] font-bold opacity-50">{i+1}</span>}
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-sm font-display leading-tight" style={{ color: 'var(--text-primary)' }}>{m.name}</h3>
-                        <p className="text-[10px] font-medium mt-0.5" style={{ color: 'var(--text-muted)' }}>{m.distance_km} km away</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] font-bold uppercase text-green-500 mb-0.5">Net Return</p>
-                      <div className="flex items-baseline gap-0.5 justify-end">
-                        <span className="text-xs font-semibold opacity-70">₹</span>
-                        <span className="text-lg font-black font-display price-counter" style={{ color: 'var(--text-primary)' }}>{m.net_value}</span>
-                      </div>
-                    </div>
-                  </div>
+            <button
+              onClick={fetchMandis}
+              disabled={loading}
+              className="flex w-full items-center justify-center gap-2 rounded-[22px] bg-[linear-gradient(135deg,var(--leaf-400),var(--leaf-600))] px-5 py-4 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(79,111,44,0.28)] transition disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {loading ? <><SpinnerIcon /> Building mandi shortlist...</> : <><MapPinIcon className="h-4 w-4" /> Find the best mandi</>}
+            </button>
 
-                  {/* Breakdown details */}
-                  <div className="grid grid-cols-2 gap-2 mt-1 pt-3" style={{ borderTop: '1px dashed var(--border-subtle)' }}>
-                    <div>
-                      <p className="text-[9px] font-bold uppercase" style={{ color: 'var(--text-faint)' }}>Modal Price</p>
-                      <p className="text-xs font-mono font-medium mt-0.5" style={{ color: 'var(--text-secondary)' }}>₹{m.modal_price}/kg</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[9px] font-bold uppercase" style={{ color: 'var(--text-faint)' }}>Est. Transport</p>
-                      <p className="text-xs font-mono font-medium mt-0.5 text-red-400">-₹{m.transport_cost}/kg</p>
-                    </div>
-                  </div>
-                  
-                  {/* Supply indicator bar */}
-                  <div className="mt-3 flex items-center gap-2">
-                    <div className="flex-1 h-1 rounded-full bg-black/10 dark:bg-white/5 overflow-hidden flex">
-                      {/* Random visual fill for supply level - just for UI aesthetics */}
-                      <div className="h-full bg-green-500/50" style={{ width: `${60 - (i*10)}%` }} />
-                    </div>
-                    <span className="text-[9px] font-bold uppercase" style={{ color: 'var(--text-muted)' }}>Supply Level</span>
-                  </div>
-
-                </div>
-              ))}
+            <div className="rounded-[22px] border border-white/8 bg-[rgba(255,255,255,0.04)] p-4">
+              <p className="text-[11px] uppercase tracking-[0.22em] text-[var(--mist-500)]">Decision rule</p>
+              <p className="mt-2 text-sm leading-6 text-[var(--mist-300)]">A higher price is not always a better deal. KrishiDoot ranks mandis by what is left after distance-based freight is deducted.</p>
             </div>
           </div>
+        </SurfaceCard>
+
+        <div ref={resultsRef} className="space-y-4">
+          {result && sorted.length > 0 ? (
+            <>
+              <SurfaceCard className="market-rec-banner p-5">
+                <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+                  <div className="space-y-3">
+                    <StatusBadge tone="leaf">Best route today</StatusBadge>
+                    <div>
+                      <p className="font-display text-3xl leading-tight text-[var(--mist-100)]">{best.name}</p>
+                      <p className="mt-1 text-sm text-[var(--mist-400)]">{best.district} | {best.distance_km} km away</p>
+                    </div>
+                    <p className="max-w-xl text-sm leading-6 text-[var(--mist-300)]">This mandi currently gives the strongest net value after applying your transport drag. It is the best floor reference for negotiation.</p>
+                    {extraPerKg && parseFloat(extraPerKg) > 0 && (
+                      <div className="inline-flex items-center gap-2 rounded-full border border-[rgba(124,175,77,0.22)] bg-[rgba(124,175,77,0.1)] px-3 py-1.5 text-xs text-[var(--leaf-300)]">
+                        <ChartIcon className="h-3.5 w-3.5" />
+                        Rs.{extraPerKg}/kg ahead of {second.name}
+                      </div>
+                    )}
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+                    <div className="rounded-[22px] border border-white/8 bg-[rgba(255,255,255,0.04)] p-4">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--mist-500)]">Modal</p>
+                      <p className="tabular-nums mt-2 font-display text-3xl text-[var(--mist-100)]">Rs.{best.price}</p>
+                    </div>
+                    <div className="rounded-[22px] border border-white/8 bg-[rgba(255,255,255,0.04)] p-4">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--mist-500)]">Transport drag</p>
+                      <p className="tabular-nums mt-2 font-display text-3xl text-[var(--danger-300)]">Rs.{best.transport}</p>
+                    </div>
+                    <div className="rounded-[22px] border border-[rgba(124,175,77,0.22)] bg-[rgba(124,175,77,0.1)] p-4">
+                      <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--mist-500)]">Net value</p>
+                      <p className="tabular-nums mt-2 font-display text-3xl text-[var(--leaf-300)]">Rs.{best.net}</p>
+                    </div>
+                  </div>
+                </div>
+              </SurfaceCard>
+
+              <div className="grid gap-4 xl:grid-cols-[0.95fr_1.05fr]">
+                <div className="order-2 xl:order-1">
+                  <MandiMap mandis={sorted} />
+                </div>
+                <div className="order-1 space-y-3 xl:order-2">
+                  {sorted.map((m, i) => {
+                    const isBest = i === 0
+                    return (
+                      <SurfaceCard key={m.name} className="market-mandi-card p-4">
+                        <div className="flex items-start gap-3">
+                          <div className={`flex h-8 w-8 items-center justify-center rounded-xl border text-xs font-black ${isBest ? 'border-[rgba(124,175,77,0.22)] bg-[rgba(124,175,77,0.12)] text-[var(--leaf-300)]' : 'border-white/10 bg-white/5 text-[var(--mist-300)]'}`}>{i + 1}</div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-display text-xl text-[var(--mist-100)]">{m.name}</p>
+                              {isBest && <StatusBadge tone="leaf">Best value</StatusBadge>}
+                            </div>
+                            <p className="mt-1 text-xs text-[var(--mist-500)]">{m.district} | {m.distance_km} km from source</p>
+                          </div>
+                          <TrendBadge trend={m.trend} />
+                        </div>
+
+                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                          {[
+                            { label: 'Modal', value: `Rs.${m.price}`, tone: 'text-[var(--mist-100)]' },
+                            { label: 'Freight', value: `Rs.${m.transport}`, tone: 'text-[var(--danger-300)]' },
+                            { label: 'Net', value: `Rs.${m.net}`, tone: isBest ? 'text-[var(--leaf-300)]' : 'text-[var(--mist-100)]' },
+                          ].map((item) => (
+                            <div key={item.label} className="rounded-[20px] border border-white/8 bg-[rgba(255,255,255,0.04)] p-3 text-center">
+                              <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--mist-500)]">{item.label}</p>
+                              <p className={`tabular-nums mt-2 font-display text-2xl ${item.tone}`}>{item.value}</p>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto] lg:items-end">
+                          <SupplyBar arrivals={m.arrivals_tonnes} />
+                          {isBest && (
+                            <div className="rounded-[20px] border border-[rgba(124,175,77,0.18)] bg-[rgba(124,175,77,0.08)] px-4 py-3 text-xs leading-5 text-[var(--mist-300)]">
+                              <p className="font-medium text-[var(--leaf-300)]">Negotiation floor cue</p>
+                              <p className="mt-1">Do not settle below roughly Rs.{(m.net - 0.5).toFixed(2)}/kg when benchmarking this route.</p>
+                            </div>
+                          )}
+                        </div>
+                      </SurfaceCard>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <p className="text-xs text-[var(--mist-500)]">Source: {result.data_source}. Map tiles by CARTO.</p>
+            </>
+          ) : !loading && !error ? (
+            <SurfaceCard className="flex min-h-[420px] flex-col items-center justify-center gap-4 p-8 text-center">
+              <div className="flex h-20 w-20 items-center justify-center rounded-[24px] border border-white/10 bg-white/5 text-[var(--millet-300)]">
+                <MapPinIcon className="h-9 w-9" />
+              </div>
+              <div className="space-y-2">
+                <p className="font-display text-3xl text-[var(--mist-100)]">A map-ranked mandi shortlist appears here.</p>
+                <p className="mx-auto max-w-xl text-sm leading-6 text-[var(--mist-400)]">Choose the crop, set your transport drag, and KrishiDoot will show which mandi actually leaves the strongest net value.</p>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-[var(--mist-300)]">
+                <ArrowRightIcon className="h-3.5 w-3.5" />
+                Mobile emphasizes the best route first. Desktop keeps the map and ranking side by side.
+              </div>
+            </SurfaceCard>
+          ) : null}
         </div>
-      )}
+      </div>
     </div>
   )
 }
