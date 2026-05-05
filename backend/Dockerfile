@@ -26,8 +26,10 @@ COPY --from=builder /install /usr/local
 # Copy application source code
 COPY . .
 
-# Expose FastAPI port
-EXPOSE 8000
+# Cloud platforms provide a dynamic PORT environment variable.
+# We fallback to 8000 for local docker-compose usage.
+ENV PORT=8000
+EXPOSE ${PORT}
 
-# Run the FastAPI app with uvicorn
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run the FastAPI app with uvicorn listening on the dynamically injected PORT
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT}"]
