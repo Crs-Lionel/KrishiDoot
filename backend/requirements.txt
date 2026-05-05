@@ -23,3 +23,6 @@ feedparser
 
 # Optional: NeMo Guardrails (install separately if needed)
 # nemoguardrails==0.9.0
+
+# Text-to-Speech
+gtts
