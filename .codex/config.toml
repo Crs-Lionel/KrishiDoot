@@ -1,0 +1,13 @@
+[mcp_servers.21st-magic]
+command = "npx"
+args = [
+    "-y",
+    "@21st-dev/magic@latest",
+]
+
+[mcp_servers.browsermcp]
+command = "npx"
+args = [
+    "-y",
+    "@browsermcp/mcp@latest",
+]
